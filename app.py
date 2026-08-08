@@ -14,6 +14,7 @@ from paperalpha.config import (
     DEFAULT_TRADER_SIGNALS_PATH,
     DEFAULT_UNIVERSE,
     REPORT_DIR,
+    initialize_runtime_files,
 )
 from paperalpha.market_clock import MarketClock
 from paperalpha.market_data import MarketDataError, YahooMarketData
@@ -23,6 +24,8 @@ from paperalpha.research import ResearchEngine
 from paperalpha.sentiment import FinancialNewsSentiment
 from paperalpha.storage import PortfolioStore
 from paperalpha.trader_signals import PublicTraderSignals
+
+initialize_runtime_files()
 
 
 def _parse_tickers(value: str) -> tuple[list[str], list[str]]:
