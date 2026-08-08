@@ -9,8 +9,12 @@ orders, connect to a brokerage, or present its score as a probability of profit.
 
 ## What it does
 
-- Ranks 2–30 ticker symbols using momentum, trend, risk, volume, recent-news tone, and dated
-  public-disclosure signals.
+- Discovers the current US stock universe from Nasdaq Trader's live NASDAQ and other-exchange
+  symbol directories; ETFs, test issues, warrants, rights, units, and preferred shares are removed.
+- Pages through every stock meeting configurable price, market-cap, and average-volume thresholds,
+  then deeply analyses the strongest 20–150 candidates. Custom scans accept up to 100 symbols.
+- Uses 30+ inputs across momentum, trend, market-relative strength, quality, value, analyst
+  consensus, news, risk, entry setup, liquidity, volume, earnings timing, and dated disclosures.
 - Shows the top paper idea, ticker symbol, reference price, share quantity, unused cash, model
   score, signal strength, factor attribution, warnings, and recent headlines.
 - Reprices the order at entry and refuses to invent an executable price when the NYSE is closed.
@@ -26,10 +30,15 @@ orders, connect to a brokerage, or present its score as a probability of profit.
 ```mermaid
 flowchart LR
     UI["Streamlit dashboard"] --> RE["Research engine"]
+    DIR["Nasdaq Trader symbol directory"] --> RE
+    RE --> PRE["Full-market eligibility + coarse screen"]
+    PRE --> MD
     RE --> MD["Yahoo market-data adapter"]
     RE --> NS["Headline sentiment"]
     RE --> PT["Point-in-time disclosures"]
+    MD --> FP["Company, analyst + earnings profile"]
     MD --> SC["Cross-sectional scorer"]
+    FP --> SC
     NS --> SC
     PT --> SC
     SC --> UI
@@ -46,19 +55,32 @@ broker-provided feed can replace it without rewriting the factor model or dashbo
 
 | Factor | Weight | Input |
 |---|---:|---|
-| Momentum | 30% | Adjusted 5-, 20-, and 60-session returns |
-| Trend | 20% | Price/20-day SMA and 20-day/50-day SMA relationships |
-| News | 20% | Recency-weighted VADER sentiment from ticker-linked headlines |
-| Risk | 15% | 20-day annualized volatility and current 60-day drawdown |
-| Volume | 10% | Five-day volume relative to 20-day volume, signed by price direction |
-| Public traders | 5% | Recency- and size-weighted disclosed buys and sells |
+| Momentum | 16% | Adjusted 5-, 20-, 60-, and 120-session returns |
+| Trend | 12% | 20/50/200-day averages and MACD histogram |
+| Quality | 13% | Revenue/EPS growth, ROE, margins, free cash flow, leverage, current ratio |
+| News | 11% | Recency-weighted VADER sentiment from ticker-linked headlines |
+| Value | 9% | Forward/trailing earnings yield and book yield |
+| Risk | 9% | Volatility, downside volatility, ATR, drawdown, beta, and short float |
+| Market | 8% | SPY-relative returns, rolling beta, correlation, and market regime |
+| Analyst | 8% | Consensus rating, target-price upside, and number of analysts |
+| Setup | 5% | RSI and Bollinger-position entry quality |
+| Liquidity | 4% | Average dollar volume and Amihud illiquidity |
+| Volume | 3% | Five-day volume relative to 20-day volume, signed by price direction |
+| Earnings event | 1% | Proximity to the next reported earnings date |
+| Public traders | 1% | Recency- and size-weighted disclosed buys and sells |
 
-Price factors are converted into robust cross-sectional scores with the median and median
-absolute deviation. This makes the result a ranking **within the selected universe**. A score of
+Comparable inputs are converted into robust cross-sectional scores with the median and median
+absolute deviation. This makes the result a ranking **within the deep-analysis set**. A score of
 70 means stronger relative evidence than 50; it does not mean a 70% chance of making money.
 
-Missing news or disclosure data receives a neutral factor score and lowers signal strength. The
-dashboard shows that coverage gap rather than silently treating missing data as positive.
+Missing fundamentals, analyst data, news, or disclosures receive neutral component scores and
+lower signal strength. The dashboard shows those coverage gaps rather than silently treating
+missing data as positive.
+
+The broad scan is intentionally two-stage. It evaluates the full eligible screen using inexpensive
+quote-level fields, then downloads one year of history and richer profiles only for the configured
+deep-analysis count. This keeps a free research feed usable without claiming that thousands of
+simultaneous detailed requests would be reliable.
 
 ## Quick start
 
@@ -152,8 +174,9 @@ The sample above is illustrative, not real market data. More detail about the sc
 
 ## Backtesting correctly
 
-The Model lab uses only historical price factors because the free provider does not include a
-point-in-time archive of every headline and disclosure. At each rebalance:
+The Model lab uses the technical sleeve only because the free provider does not include a
+point-in-time archive of historical fundamentals, analyst revisions, headlines, and disclosures.
+At each rebalance:
 
 1. Features use data available through session `t`.
 2. The highest-ranked ticker is selected after that close.
@@ -184,6 +207,7 @@ filtering, and next-session backtest execution. Network access is not required b
 app.py                         Streamlit UI
 src/paperalpha/
   market_data.py              Provider boundary and ticker-linked news parsing
+  universe.py                 Live US listing directory, filters, and stale-on-error cache
   scoring.py                  Point-in-time features and cross-sectional ranking
   sentiment.py                Recency-weighted financial headline sentiment
   trader_signals.py           Public-disclosure ingestion and decay
@@ -202,7 +226,9 @@ tests/                         Deterministic unit and integration tests
 - Free quotes may be delayed, corrected, incomplete, or temporarily unavailable.
 - Headline sentiment does not understand every context, sarcasm, rumor, or event impact.
 - Public investor and insider disclosures are delayed by definition.
-- The current universe is not a complete or survivorship-bias-free market history.
+- The live universe comes from the current
+  [Nasdaq Trader symbol directory](https://www.nasdaqtrader.com/trader.aspx?id=symboldirdefs),
+  so historical tests are not survivorship-bias-free.
 - Paper execution excludes liquidity constraints, partial fills, spreads, taxes, and realistic
   market impact.
 

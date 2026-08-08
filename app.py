@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import replace
 from zoneinfo import ZoneInfo
 
@@ -11,8 +12,12 @@ from paperalpha.backtest import walk_forward_backtest
 from paperalpha.config import (
     APP_NAME,
     DEFAULT_DB_PATH,
+    DEFAULT_DEEP_SCAN_SIZE,
     DEFAULT_TRADER_SIGNALS_PATH,
     DEFAULT_UNIVERSE,
+    FACTOR_WEIGHTS,
+    MAX_CUSTOM_SCAN_SIZE,
+    MAX_DEEP_SCAN_SIZE,
     REPORT_DIR,
     initialize_runtime_files,
 )
@@ -29,14 +34,12 @@ initialize_runtime_files()
 
 
 def _parse_tickers(value: str) -> tuple[list[str], list[str]]:
-    import re
-
     candidates = value.replace(",", " ").split()
     symbols: list[str] = []
     invalid: list[str] = []
     for candidate in candidates:
         symbol = candidate.upper().strip()
-        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,9}", symbol):
+        if not re.fullmatch(r"[A-Z0-9][A-Z0-9.-]{0,13}", symbol):
             invalid.append(candidate)
         elif symbol not in symbols:
             symbols.append(symbol)
@@ -50,7 +53,7 @@ st.markdown(
       .block-container {max-width: 1240px; padding-top: 2.25rem;}
       .pa-kicker {color:#42D39A; font-size:.78rem; font-weight:800; letter-spacing:.14em;}
       .pa-hero {font-size:3rem; line-height:1.02; font-weight:800; margin:.25rem 0 .65rem;}
-      .pa-muted {color:#91A4BA; max-width:760px;}
+      .pa-muted {color:#91A4BA; max-width:820px;}
       .pa-card {background:linear-gradient(135deg,#13243A,#0E1929); border:1px solid #253850;
                 border-radius:16px; padding:1.15rem 1.25rem; margin:.5rem 0 1rem;}
       .pa-ticker {color:#42D39A; font-size:2.4rem; font-weight:850;}
@@ -85,6 +88,23 @@ def cached_scan(tickers: tuple[str, ...], include_news: bool):
 
 
 @st.cache_data(ttl=900, show_spinner=False)
+def cached_market_scan(
+    include_news: bool,
+    min_price: float,
+    min_average_volume: int,
+    min_market_cap: int,
+    deep_scan_size: int,
+):
+    return resources()[3].scan_market(
+        include_news=include_news,
+        min_price=min_price,
+        min_average_volume=min_average_volume,
+        min_market_cap=min_market_cap,
+        deep_scan_size=deep_scan_size,
+    )
+
+
+@st.cache_data(ttl=900, show_spinner=False)
 def cached_history(tickers: tuple[str, ...], period: str):
     return resources()[0].daily_history(list(tickers), period=period)
 
@@ -95,21 +115,67 @@ session = clock.session_info()
 st.markdown('<div class="pa-kicker">EXPLAINABLE PAPER TRADING</div>', unsafe_allow_html=True)
 st.markdown('<div class="pa-hero">Find a signal. Test the thesis.</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="pa-muted">PaperAlpha ranks a liquid stock universe from price action, '
-    "risk, volume, news tone, and point-in-time public disclosures—then measures the "
-    "idea instead of pretending it was a certainty.</div>",
+    '<div class="pa-muted">PaperAlpha screens the US stock market using price action, '
+    "fundamentals, analyst expectations, risk, liquidity, news, and public disclosures—then "
+    "measures the paper idea instead of pretending it was a certainty.</div>",
     unsafe_allow_html=True,
 )
 
 with st.sidebar:
     st.header("Research setup")
     budget = st.number_input("Paper budget (USD)", min_value=25.0, value=10_000.0, step=250.0)
-    ticker_text = st.text_area(
-        "Ticker universe",
-        value=", ".join(DEFAULT_UNIVERSE),
-        height=125,
-        help="Comma- or space-separated US ticker symbols; 2–30 tickers.",
+    universe_mode = st.selectbox(
+        "Stock universe",
+        ("Full US market", "Starter universe", "Custom tickers"),
+        help="Full market uses the current Nasdaq Trader directory and a two-stage scan.",
     )
+    ticker_text = ""
+    min_price = 3.0
+    min_average_volume = 500_000
+    min_market_cap = 300_000_000
+    deep_scan_size = DEFAULT_DEEP_SCAN_SIZE
+    if universe_mode == "Full US market":
+        st.caption(
+            "NASDAQ, NYSE, NYSE American, Arca, Cboe BZX, and IEX stocks; "
+            "ETFs and test issues excluded."
+        )
+        with st.expander("Eligibility and scan depth"):
+            min_price = st.number_input(
+                "Minimum share price", min_value=1.0, max_value=100.0, value=3.0, step=1.0
+            )
+            min_average_volume = st.number_input(
+                "Minimum 3-month average volume",
+                min_value=50_000,
+                max_value=10_000_000,
+                value=500_000,
+                step=50_000,
+            )
+            min_market_cap_m = st.number_input(
+                "Minimum market cap (USD millions)",
+                min_value=50,
+                max_value=100_000,
+                value=300,
+                step=50,
+            )
+            min_market_cap = int(min_market_cap_m * 1_000_000)
+            deep_scan_size = st.slider(
+                "Deep-analysis candidates",
+                min_value=20,
+                max_value=MAX_DEEP_SCAN_SIZE,
+                value=DEFAULT_DEEP_SCAN_SIZE,
+                step=10,
+            )
+    elif universe_mode == "Starter universe":
+        ticker_text = ", ".join(DEFAULT_UNIVERSE)
+        st.caption(ticker_text)
+    else:
+        ticker_text = st.text_area(
+            "Ticker symbols",
+            value=", ".join(DEFAULT_UNIVERSE),
+            height=125,
+            help=f"Comma- or space-separated symbols; 2–{MAX_CUSTOM_SCAN_SIZE} tickers.",
+        )
+
     fractional = st.toggle("Allow fractional shares", value=False)
     include_news = st.toggle("Include current news tone", value=True)
     scan_clicked = st.button("Run research scan", type="primary", use_container_width=True)
@@ -124,19 +190,41 @@ with st.sidebar:
         st.caption(f"Next open {next_london:%a %d %b, %H:%M %Z}")
     st.caption("Educational research only · delayed/free data")
 
-symbols, invalid = _parse_tickers(ticker_text)
+symbols, invalid = _parse_tickers(ticker_text) if ticker_text else ([], [])
 if invalid:
     st.sidebar.error(f"Invalid ticker symbols: {', '.join(invalid)}")
 
 if scan_clicked:
-    if invalid or not 2 <= len(symbols) <= 30:
-        st.error("Enter between 2 and 30 valid ticker symbols.")
+    if universe_mode == "Full US market":
+        with st.spinner(
+            "Screening the full US directory, then deeply analysing the strongest candidates…"
+        ):
+            try:
+                cached_market_scan.clear()
+                scan_result = cached_market_scan(
+                    include_news,
+                    float(min_price),
+                    int(min_average_volume),
+                    int(min_market_cap),
+                    int(deep_scan_size),
+                )
+                st.session_state["analysis"] = list(scan_result.analyses)
+                st.session_state["research_scan"] = scan_result
+                st.session_state["scan_symbols"] = [
+                    item.ticker for item in scan_result.analyses[:20]
+                ]
+            except Exception as exc:
+                st.error(f"The scan could not finish: {exc}")
+    elif invalid or not 2 <= len(symbols) <= MAX_CUSTOM_SCAN_SIZE:
+        st.error(f"Enter between 2 and {MAX_CUSTOM_SCAN_SIZE} valid ticker symbols.")
     else:
-        with st.spinner(f"Scoring {len(symbols)} stocks and reading recent headlines…"):
+        with st.spinner(f"Deeply scoring {len(symbols)} stocks and reading recent headlines…"):
             try:
                 cached_scan.clear()
-                st.session_state["analysis"] = cached_scan(tuple(symbols), include_news)
-                st.session_state["scan_symbols"] = symbols
+                analyses = cached_scan(tuple(symbols), include_news)
+                st.session_state["analysis"] = analyses
+                st.session_state["research_scan"] = None
+                st.session_state["scan_symbols"] = [item.ticker for item in analyses[:20]]
             except Exception as exc:
                 st.error(f"The scan could not finish: {exc}")
 
@@ -150,6 +238,13 @@ with pick_tab:
         st.info("Set a budget and run the research scan to generate a paper pick.")
     else:
         pick = analyses[0]
+        research_scan = st.session_state.get("research_scan")
+        if research_scan:
+            st.caption(
+                f"Directory: {research_scan.directory_count:,} stocks · "
+                f"eligible: {research_scan.eligible_count:,} · "
+                f"deeply analysed: {research_scan.deep_count:,}"
+            )
         shares = budget / pick.price if fractional else int(budget // pick.price)
         cash = max(0.0, budget - shares * pick.price)
         st.markdown(
@@ -179,9 +274,8 @@ with pick_tab:
         ):
             try:
                 live_price = market_data.latest_price(pick.ticker)
-                live_pick = replace(pick, price=live_price)
                 position = store.open_position(
-                    live_pick,
+                    replace(pick, price=live_price),
                     budget,
                     fractional_shares=fractional,
                 )
@@ -196,7 +290,24 @@ with pick_tab:
         factor_frame = pd.DataFrame(
             {"Factor": list(pick.factor_scores), "Score": list(pick.factor_scores.values())}
         ).sort_values("Score", ascending=False)
-        st.bar_chart(factor_frame.set_index("Factor"), horizontal=True, color="#42D39A")
+        factor_chart = go.Figure(
+            go.Bar(
+                x=factor_frame["Score"],
+                y=factor_frame["Factor"],
+                orientation="h",
+                marker_color="#42D39A",
+                hovertemplate="%{y}: %{x:.1f}<extra></extra>",
+            )
+        )
+        factor_chart.update_layout(
+            height=430,
+            margin={"l": 10, "r": 10, "t": 10, "b": 10},
+            xaxis={"range": [0, 100], "title": "Factor score"},
+            yaxis={"autorange": "reversed", "title": None},
+            template="plotly_dark",
+            showlegend=False,
+        )
+        st.plotly_chart(factor_chart, use_container_width=True)
         with st.expander("Risk flags and data gaps", expanded=bool(pick.warnings)):
             if pick.warnings:
                 for warning in pick.warnings:
@@ -213,8 +324,14 @@ with pick_tab:
                     "Score": item.score,
                     "Price": item.price,
                     "20d return": item.metrics["return_20d"],
+                    "120d return": item.metrics["return_120d"],
+                    "vs market (60d)": item.metrics["relative_return_60d"],
                     "20d volatility": item.metrics["volatility_20d"],
                     "RSI (14)": item.metrics["rsi_14"],
+                    "Forward P/E": item.metrics.get("forward_pe"),
+                    "Revenue growth": item.metrics.get("revenue_growth"),
+                    "ROE": item.metrics.get("return_on_equity"),
+                    "Analyst upside": item.metrics.get("analyst_upside"),
                 }
                 for index, item in enumerate(analyses, start=1)
             ]
@@ -226,10 +343,24 @@ with pick_tab:
             column_config={
                 "Price": st.column_config.NumberColumn(format="$%.2f"),
                 "20d return": st.column_config.NumberColumn(format="percent"),
+                "120d return": st.column_config.NumberColumn(format="percent"),
+                "vs market (60d)": st.column_config.NumberColumn(format="percent"),
                 "20d volatility": st.column_config.NumberColumn(format="percent"),
+                "Revenue growth": st.column_config.NumberColumn(format="percent"),
+                "ROE": st.column_config.NumberColumn(format="percent"),
+                "Analyst upside": st.column_config.NumberColumn(format="percent"),
                 "Score": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f"),
             },
         )
+
+        with st.expander(f"{pick.ticker} model inputs"):
+            model_inputs = pd.DataFrame(
+                [
+                    {"Metric": key.replace("_", " ").title(), "Value": value}
+                    for key, value in sorted(pick.metrics.items())
+                ]
+            )
+            st.dataframe(model_inputs, hide_index=True, use_container_width=True)
 
         if pick.headlines:
             st.subheader(f"Recent {pick.ticker} headlines")
@@ -247,7 +378,8 @@ with pick_tab:
 
 with live_tab:
     st.caption(
-        "This panel refreshes once per minute while the page is open. Run the background monitor for unattended tracking."
+        "This panel refreshes once per minute while the page is open. Run the background monitor "
+        "for unattended tracking."
     )
 
     @st.fragment(run_every="60s")
@@ -304,8 +436,8 @@ with lab_tab:
     st.subheader("Walk-forward test")
     st.write(
         "Signals use information through one close, enter at the next session's open, and include "
-        "round-trip costs. News and trader factors stay neutral because this free setup does not "
-        "have point-in-time archives for them."
+        "round-trip costs. The test uses the technical sleeve only: this free setup has no "
+        "point-in-time archive for fundamentals, analyst revisions, news, or disclosures."
     )
     hold_days = st.slider("Holding period (sessions)", 1, 20, 5)
     costs = st.slider("Transaction cost (basis points per side)", 0, 25, 5)
@@ -346,16 +478,16 @@ with reports_tab:
         report_frame = pd.DataFrame(
             [
                 {
-                    "Ticker": p.ticker,
-                    "Status": p.status,
-                    "Opened": p.opened_at,
-                    "Budget": p.budget,
-                    "Entry": p.entry_price,
-                    "Exit": p.exit_price,
-                    "P/L": p.pnl,
-                    "Return %": p.return_pct,
+                    "Ticker": position.ticker,
+                    "Status": position.status,
+                    "Opened": position.opened_at,
+                    "Budget": position.budget,
+                    "Entry": position.entry_price,
+                    "Exit": position.exit_price,
+                    "P/L": position.pnl,
+                    "Return %": position.return_pct,
                 }
-                for p in all_positions
+                for position in all_positions
             ]
         )
         st.dataframe(report_frame, hide_index=True, use_container_width=True)
@@ -369,23 +501,46 @@ with reports_tab:
 with method_tab:
     st.subheader("What the score means")
     st.write(
-        "Each price-based feature is compared with the other stocks in the selected universe using "
+        "Each comparable feature is scored against the other stocks in the deep-analysis set using "
         "a robust median/MAD transform. A score of 70 means stronger relative evidence than 50; it "
         "does not mean a 70% chance of profit."
     )
-    st.markdown(
-        """
-| Factor | Weight | What is measured |
-|---|---:|---|
-| Momentum | 30% | 5-, 20-, and 60-session adjusted returns |
-| Trend | 20% | Price vs. 20-day average and 20- vs. 50-day average |
-| News | 20% | Time-decayed sentiment from recent headlines |
-| Risk | 15% | Realized volatility and current 60-day drawdown |
-| Volume | 10% | Recent volume confirmation of price direction |
-| Public traders | 5% | Time-decayed, disclosure-available buy/sell records |
-        """
+    factor_descriptions = {
+        "momentum": "5/20/60/120-session returns",
+        "trend": "20/50/200-day averages and MACD",
+        "market": "SPY-relative returns, beta, and market regime",
+        "quality": "growth, margins, ROE, cash flow, leverage, liquidity",
+        "value": "forward/trailing earnings yield and book yield",
+        "analyst": "consensus rating, target upside, and coverage",
+        "news": "time-decayed ticker-linked headline sentiment",
+        "risk": "volatility, downside risk, ATR, drawdown, beta, short float",
+        "setup": "RSI and Bollinger-position entry quality",
+        "liquidity": "dollar volume and Amihud illiquidity",
+        "volume": "recent volume confirmation",
+        "event": "proximity to the next earnings event",
+        "trader": "dated public buy/sell disclosures",
+    }
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "Factor": factor.title(),
+                    "Weight": weight,
+                    "What is measured": factor_descriptions[factor],
+                }
+                for factor, weight in FACTOR_WEIGHTS.items()
+            ]
+        ),
+        hide_index=True,
+        use_container_width=True,
+        column_config={"Weight": st.column_config.NumberColumn(format="percent")},
+    )
+    st.warning(
+        "More inputs do not automatically create predictive accuracy. Validate changes with "
+        "walk-forward and out-of-sample tests; current fundamentals and analyst data are not used "
+        "in the historical test because a point-in-time archive is not available."
     )
     st.info(
         "Free Yahoo data is intended for personal research and may be delayed. Replace the provider "
-        "adapter with a licensed feed before relying on real-time execution."
+        "adapter with a licensed point-in-time feed before relying on serious research or execution."
     )
