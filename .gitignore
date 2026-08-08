@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+.env
+.DS_Store
+
+# Runtime state (the schema and examples remain versioned)
+state/*.db
+state/*.db-*
+state/reports/*.json
+state/reports/*.csv
+
+# Streamlit local secrets
+.streamlit/secrets.toml

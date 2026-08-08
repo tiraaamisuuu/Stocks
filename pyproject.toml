@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperalpha"
+version = "0.1.0"
+description = "Explainable stock research and intraday paper-trading dashboard"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "PaperAlpha contributors" }]
+dependencies = [
+  "numpy>=2.0,<3",
+  "pandas>=2.2,<4",
+  "pandas-market-calendars>=5.0,<7",
+  "plotly>=5.24,<7",
+  "streamlit>=1.42,<2",
+  "vaderSentiment>=3.3.2,<4",
+  "yfinance>=0.2.54,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+paperalpha-monitor = "paperalpha.monitor:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q --disable-warnings --strict-markers"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
