@@ -15,6 +15,7 @@ state/*.db
 state/*.db-*
 state/reports/*.json
 state/reports/*.csv
+state/yfinance-cache/
 
 # Streamlit local secrets
 .streamlit/secrets.toml

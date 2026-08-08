@@ -9,6 +9,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 STATE_DIR = PROJECT_ROOT / "state"
 REPORT_DIR = STATE_DIR / "reports"
 DEFAULT_DB_PATH = STATE_DIR / "paperalpha.db"
+YFINANCE_CACHE_DIR = STATE_DIR / "yfinance-cache"
 DEFAULT_TRADER_SIGNALS_PATH = DATA_DIR / "trader_signals.csv"
 
 # A deliberately liquid, cross-sector US large-cap research universe. Users can

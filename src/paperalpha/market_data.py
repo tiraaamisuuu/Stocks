@@ -6,6 +6,7 @@ from datetime import date, timedelta
 import pandas as pd
 import yfinance as yf
 
+from paperalpha.config import YFINANCE_CACHE_DIR
 from paperalpha.domain import NewsItem
 
 
@@ -31,6 +32,10 @@ class YahooMarketData:
     it with a licensed real-time feed straightforward.
     """
 
+    def __init__(self) -> None:
+        YFINANCE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        yf.set_tz_cache_location(str(YFINANCE_CACHE_DIR))
+
     def daily_history(self, tickers: Iterable[str], period: str = "1y") -> dict[str, pd.DataFrame]:
         symbols = list(
             dict.fromkeys(symbol.upper().strip() for symbol in tickers if symbol.strip())
@@ -46,7 +51,9 @@ class YahooMarketData:
                 auto_adjust=True,
                 repair=True,
                 group_by="ticker",
-                threads=True,
+                # yfinance's first timezone-cache write can race across download
+                # workers on Windows, so reliability wins over a small speed-up.
+                threads=False,
                 progress=False,
                 timeout=20,
                 multi_level_index=True,
