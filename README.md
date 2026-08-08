@@ -92,6 +92,32 @@ streamlit run app.py
 The dashboard opens at `http://localhost:8501`. Run a scan at any time. The **Start paper trade**
 button is enabled only during the regular NYSE session so the entry price is reproducible.
 
+## Windows executable
+
+The repository includes a reproducible PyInstaller build that creates a single `PaperAlpha.exe`.
+On Windows PowerShell:
+
+```powershell
+.\scripts\build_windows.ps1
+```
+
+The result is written to `dist\PaperAlpha.exe`. Double-clicking it starts a local dashboard and
+opens the default browser; no system-wide Python installation is needed on the destination PC.
+The first launch can take several seconds because the one-file package extracts its runtime.
+
+Packaged runtime data is kept outside the temporary executable bundle:
+
+```text
+%LOCALAPPDATA%\PaperAlpha\paperalpha.db
+%LOCALAPPDATA%\PaperAlpha\trader_signals.csv
+%LOCALAPPDATA%\PaperAlpha\reports\
+```
+
+The executable is not digitally signed, so Windows SmartScreen may show an unknown-publisher
+warning. A code-signing certificate is required to remove that warning for public distribution.
+GitHub Actions also builds the executable and stores it as a `PaperAlpha-Windows` workflow
+artifact for 14 days.
+
 ## Unattended intraday tracking
 
 The Live book refreshes while the dashboard is open. For tracking that continues independently

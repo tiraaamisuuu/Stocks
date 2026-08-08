@@ -1,0 +1,45 @@
+name: Windows executable
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "launcher.py"
+      - "PaperAlpha.spec"
+      - "packaging/**"
+      - "scripts/build_windows.ps1"
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/windows-exe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Build executable
+        shell: pwsh
+        run: ./scripts/build_windows.ps1
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: PaperAlpha-Windows
+          path: dist/PaperAlpha.exe
+          if-no-files-found: error
+          retention-days: 14
