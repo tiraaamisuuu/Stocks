@@ -136,41 +136,20 @@ class YahooMarketData:
         return float(cleaned["Close"].iloc[-1])
 
     def news(self, ticker: str, count: int = 10) -> list[NewsItem]:
+        symbol = ticker.upper()
         try:
-            records = yf.Ticker(ticker.upper()).get_news(count=count, tab="news") or []
+            records = yf.Search(symbol, news_count=count).news or []
         except Exception:
-            return []
+            try:
+                records = yf.Ticker(symbol).get_news(count=count, tab="news") or []
+            except Exception:
+                return []
 
         items: list[NewsItem] = []
         for record in records:
-            content = record.get("content", record) if isinstance(record, dict) else {}
-            if not isinstance(content, dict):
-                continue
-            title = str(content.get("title") or "").strip()
-            if not title:
-                continue
-
-            published = _parse_timestamp(
-                content.get("pubDate")
-                or content.get("displayTime")
-                or content.get("providerPublishTime")
-            )
-            provider = content.get("provider") or {}
-            publisher = (
-                provider.get("displayName", "") if isinstance(provider, dict) else str(provider)
-            )
-            url = _nested_url(content.get("canonicalUrl")) or _nested_url(
-                content.get("clickThroughUrl")
-            )
-            items.append(
-                NewsItem(
-                    title=title,
-                    published_at=published,
-                    url=url,
-                    publisher=publisher,
-                    summary=str(content.get("summary") or content.get("description") or ""),
-                )
-            )
+            item = _parse_news_record(record, symbol)
+            if item is not None:
+                items.append(item)
         return items
 
 
@@ -180,6 +159,36 @@ def _nested_url(value: object) -> str:
     if isinstance(value, dict):
         return str(value.get("url") or "")
     return ""
+
+
+def _parse_news_record(record: object, ticker: str) -> NewsItem | None:
+    content = record.get("content", record) if isinstance(record, dict) else {}
+    if not isinstance(content, dict):
+        return None
+    related = content.get("relatedTickers")
+    if related and ticker.upper() not in {str(symbol).upper() for symbol in related}:
+        return None
+    title = str(content.get("title") or "").strip()
+    if not title:
+        return None
+
+    published = _parse_timestamp(
+        content.get("pubDate") or content.get("displayTime") or content.get("providerPublishTime")
+    )
+    provider = content.get("provider") or content.get("publisher") or {}
+    publisher = provider.get("displayName", "") if isinstance(provider, dict) else str(provider)
+    url = (
+        _nested_url(content.get("canonicalUrl"))
+        or _nested_url(content.get("clickThroughUrl"))
+        or _nested_url(content.get("link"))
+    )
+    return NewsItem(
+        title=title,
+        published_at=published,
+        url=url,
+        publisher=publisher,
+        summary=str(content.get("summary") or content.get("description") or ""),
+    )
 
 
 def _parse_timestamp(value: object) -> pd.Timestamp | None:
