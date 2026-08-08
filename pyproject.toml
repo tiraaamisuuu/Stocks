@@ -21,6 +21,10 @@ dependencies = [
   "yfinance>=0.2.54,<2",
 ]
 
+[project.urls]
+Repository = "https://github.com/tiraaamisuuu/Stocks"
+Issues = "https://github.com/tiraaamisuuu/Stocks/issues"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3,<10",
