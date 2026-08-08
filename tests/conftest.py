@@ -12,7 +12,7 @@ def synthetic_history(
     start: float = 100.0,
     daily_return: float = 0.001,
     volatility: float = 0.002,
-    rows: int = 180,
+    rows: int = 280,
     seed: int = 7,
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)

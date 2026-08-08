@@ -18,6 +18,7 @@ state/*.db-*
 state/reports/*.json
 state/reports/*.csv
 state/yfinance-cache/
+state/us_listed_stocks.csv
 
 # Streamlit local secrets
 .streamlit/secrets.toml

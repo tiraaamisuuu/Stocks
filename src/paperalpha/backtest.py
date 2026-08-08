@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from paperalpha.config import MIN_HISTORY_ROWS
+from paperalpha.config import MIN_HISTORY_ROWS, PRICE_ONLY_FACTOR_WEIGHTS
 from paperalpha.scoring import rank_tickers
 
 
@@ -60,7 +60,7 @@ def walk_forward_backtest(
             for ticker, frame in usable.items()
             if signal_date in frame.index and len(frame.loc[:signal_date]) >= MIN_HISTORY_ROWS
         }
-        ranking = rank_tickers(windows)
+        ranking = rank_tickers(windows, factor_weights=PRICE_ONLY_FACTOR_WEIGHTS)
         if not ranking:
             signal_index += hold_days
             continue

@@ -19,6 +19,51 @@ class NewsItem:
 
 
 @dataclass(frozen=True)
+class ListedSecurity:
+    ticker: str
+    name: str
+    exchange: str
+
+
+@dataclass(frozen=True)
+class EquitySnapshot:
+    ticker: str
+    name: str = ""
+    exchange: str = ""
+    price: float | None = None
+    market_cap: float | None = None
+    average_volume_3m: float | None = None
+    return_52w: float | None = None
+    distance_50d: float | None = None
+    distance_200d: float | None = None
+    trailing_pe: float | None = None
+    forward_pe: float | None = None
+    price_to_book: float | None = None
+    eps_ttm: float | None = None
+    eps_forward: float | None = None
+    analyst_rating: float | None = None
+    earnings_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class CompanyProfile:
+    ticker: str
+    name: str = ""
+    sector: str = ""
+    metrics: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ResearchScan:
+    analyses: tuple[TickerAnalysis, ...]
+    directory_count: int
+    eligible_count: int
+    deep_count: int
+    generated_at: datetime
+    mode: str
+
+
+@dataclass(frozen=True)
 class TickerAnalysis:
     ticker: str
     price: float

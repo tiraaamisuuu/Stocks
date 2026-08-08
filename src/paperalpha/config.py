@@ -24,6 +24,7 @@ REPORT_DIR = STATE_DIR / "reports"
 DEFAULT_DB_PATH = STATE_DIR / "paperalpha.db"
 YFINANCE_CACHE_DIR = STATE_DIR / "yfinance-cache"
 DEFAULT_TRADER_SIGNALS_PATH = DATA_DIR / "trader_signals.csv"
+UNIVERSE_CACHE_PATH = STATE_DIR / "us_listed_stocks.csv"
 
 
 def initialize_runtime_files() -> None:
@@ -58,14 +59,36 @@ DEFAULT_UNIVERSE = [
 ]
 
 FACTOR_WEIGHTS = {
-    "momentum": 0.30,
-    "trend": 0.20,
-    "news": 0.20,
-    "risk": 0.15,
-    "volume": 0.10,
-    "trader": 0.05,
+    "momentum": 0.16,
+    "trend": 0.12,
+    "market": 0.08,
+    "quality": 0.13,
+    "value": 0.09,
+    "analyst": 0.08,
+    "news": 0.11,
+    "risk": 0.09,
+    "setup": 0.05,
+    "liquidity": 0.04,
+    "volume": 0.03,
+    "event": 0.01,
+    "trader": 0.01,
 }
 
-MIN_HISTORY_ROWS = 70
+PRICE_ONLY_FACTOR_WEIGHTS = {
+    "momentum": 0.28,
+    "trend": 0.21,
+    "market": 0.14,
+    "risk": 0.16,
+    "setup": 0.10,
+    "liquidity": 0.06,
+    "volume": 0.05,
+}
+
+MIN_HISTORY_ROWS = 200
 NEWS_LIMIT_PER_TICKER = 10
-MAX_SCAN_SIZE = 30
+MAX_CUSTOM_SCAN_SIZE = 100
+DEFAULT_DEEP_SCAN_SIZE = 80
+MAX_DEEP_SCAN_SIZE = 150
+MAX_NEWS_CANDIDATES = 35
+SCREENER_PAGE_SIZE = 250
+MAX_SCREENER_RESULTS = 5_000
