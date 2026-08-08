@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import time
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from paperalpha.config import DEFAULT_DB_PATH, REPORT_DIR
 from paperalpha.market_clock import MarketClock
@@ -26,16 +26,18 @@ class PositionMonitor:
         self.reporter = reporter
 
     def update_once(self, now: datetime | None = None) -> list[str]:
-        moment = now or datetime.now(timezone.utc)
+        moment = now or datetime.now(UTC)
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
+            moment = moment.replace(tzinfo=UTC)
         events: list[str] = []
         newly_closed_dates: set[str] = set()
 
         for position in self.store.positions(status="OPEN"):
             bounds = self.clock.session_bounds(position.session_date)
             if bounds is None:
-                events.append(f"Skipped {position.ticker}: {position.session_date} is not a market session.")
+                events.append(
+                    f"Skipped {position.ticker}: {position.session_date} is not a market session."
+                )
                 continue
             market_open, market_close = bounds
             try:
@@ -81,7 +83,9 @@ def build_monitor(db_path=DEFAULT_DB_PATH) -> PositionMonitor:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Track PaperAlpha positions and close them at the bell.")
+    parser = argparse.ArgumentParser(
+        description="Track PaperAlpha positions and close them at the bell."
+    )
     parser.add_argument("--interval", type=int, default=60, help="Polling interval in seconds.")
     parser.add_argument("--once", action="store_true", help="Update once and exit.")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="Path to the SQLite portfolio.")
@@ -91,7 +95,7 @@ def main() -> None:
 
     monitor = build_monitor(args.db)
     while True:
-        timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        timestamp = datetime.now(UTC).isoformat(timespec="seconds")
         events = monitor.update_once()
         if events:
             for event in events:
@@ -105,4 +109,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

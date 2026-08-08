@@ -3,14 +3,15 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from paperalpha.domain import PaperPosition, TickerAnalysis
-
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS positions (
@@ -51,12 +52,20 @@ class PortfolioStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.db_path, timeout=30)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = WAL")
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -75,7 +84,9 @@ class PortfolioStore:
         if analysis.price <= 0:
             raise ValueError("Entry price must be greater than zero.")
 
-        shares = budget / analysis.price if fractional_shares else float(int(budget // analysis.price))
+        shares = (
+            budget / analysis.price if fractional_shares else float(int(budget // analysis.price))
+        )
         if shares <= 0:
             raise ValueError(
                 f"The budget cannot buy one share of {analysis.ticker} at ${analysis.price:,.2f}. "
@@ -84,9 +95,9 @@ class PortfolioStore:
         if fractional_shares:
             shares = round(shares, 6)
         cash = max(0.0, budget - shares * analysis.price)
-        moment = opened_at or datetime.now(timezone.utc)
+        moment = opened_at or datetime.now(UTC)
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
+            moment = moment.replace(tzinfo=UTC)
 
         position = PaperPosition(
             id=str(uuid.uuid4()),
@@ -134,9 +145,9 @@ class PortfolioStore:
         position = self.get_position(position_id)
         if position is None:
             raise KeyError(f"Unknown position: {position_id}")
-        moment = captured_at or datetime.now(timezone.utc)
+        moment = captured_at or datetime.now(UTC)
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
+            moment = moment.replace(tzinfo=UTC)
         market_value = position.shares * price + position.cash
         pnl = market_value - position.budget
         with self._connect() as connection:
@@ -163,9 +174,9 @@ class PortfolioStore:
             raise KeyError(f"Unknown position: {position_id}")
         if position.status == "CLOSED":
             return position
-        moment = closed_at or datetime.now(timezone.utc)
+        moment = closed_at or datetime.now(UTC)
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
+            moment = moment.replace(tzinfo=UTC)
         pnl = position.shares * exit_price + position.cash - position.budget
         return_pct = pnl / position.budget * 100
         self.record_snapshot(position_id, exit_price, captured_at=moment)
@@ -185,7 +196,9 @@ class PortfolioStore:
 
     def get_position(self, position_id: str) -> PaperPosition | None:
         with self._connect() as connection:
-            row = connection.execute("SELECT * FROM positions WHERE id = ?", (position_id,)).fetchone()
+            row = connection.execute(
+                "SELECT * FROM positions WHERE id = ?", (position_id,)
+            ).fetchone()
         return _position_from_row(row) if row else None
 
     def positions(self, status: str | None = None) -> list[PaperPosition]:
@@ -232,4 +245,3 @@ def _position_from_row(row: sqlite3.Row) -> PaperPosition:
         return_pct=float(row["return_pct"]) if row["return_pct"] is not None else None,
         rationale=json.loads(row["rationale_json"]),
     )
-

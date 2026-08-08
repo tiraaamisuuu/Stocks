@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from paperalpha.config import MAX_SCAN_SIZE, NEWS_LIMIT_PER_TICKER
 from paperalpha.domain import NewsItem, TickerAnalysis
@@ -29,13 +29,19 @@ class ResearchEngine:
         as_of: datetime | None = None,
         include_news: bool = True,
     ) -> list[TickerAnalysis]:
-        symbols = list(dict.fromkeys(ticker.upper().strip() for ticker in tickers if ticker.strip()))
+        symbols = list(
+            dict.fromkeys(ticker.upper().strip() for ticker in tickers if ticker.strip())
+        )
         if len(symbols) < 2:
-            raise ValueError("Choose at least two tickers for a meaningful cross-sectional ranking.")
+            raise ValueError(
+                "Choose at least two tickers for a meaningful cross-sectional ranking."
+            )
         if len(symbols) > MAX_SCAN_SIZE:
-            raise ValueError(f"A scan is limited to {MAX_SCAN_SIZE} tickers to protect the free data feed.")
+            raise ValueError(
+                f"A scan is limited to {MAX_SCAN_SIZE} tickers to protect the free data feed."
+            )
 
-        moment = as_of or datetime.now(timezone.utc)
+        moment = as_of or datetime.now(UTC)
         histories = self.market_data.daily_history(symbols, period="1y")
         if len(histories) < 2:
             raise RuntimeError("The market-data provider returned fewer than two usable tickers.")

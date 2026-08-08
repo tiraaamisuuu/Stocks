@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -44,14 +44,20 @@ class FinancialNewsSentiment:
         as_of: datetime | None = None,
         half_life_hours: float = 36.0,
     ) -> tuple[float, tuple[NewsItem, ...]]:
-        now = as_of or datetime.now(timezone.utc)
+        now = as_of or datetime.now(UTC)
         if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
+            now = now.replace(tzinfo=UTC)
 
         weighted_total = 0.0
         weight_total = 0.0
         scored: list[NewsItem] = []
         for item in items:
+            if item.published_at is not None:
+                published = item.published_at
+                if published.tzinfo is None:
+                    published = published.replace(tzinfo=UTC)
+                if published > now:
+                    continue
             text = f"{item.title}. {item.summary}".strip()
             sentiment = float(self.analyzer.polarity_scores(text)["compound"])
             scored_item = replace(item, sentiment=sentiment)
@@ -59,9 +65,6 @@ class FinancialNewsSentiment:
 
             age_hours = 0.0
             if item.published_at is not None:
-                published = item.published_at
-                if published.tzinfo is None:
-                    published = published.replace(tzinfo=timezone.utc)
                 age_hours = max(0.0, (now - published).total_seconds() / 3600)
             weight = math.exp(-math.log(2) * age_hours / half_life_hours)
             weighted_total += sentiment * weight

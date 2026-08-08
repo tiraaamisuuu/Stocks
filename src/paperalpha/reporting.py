@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -22,7 +22,7 @@ class SessionReporter:
         total_pnl = sum(position.pnl or 0 for position in positions)
         summary = {
             "session_date": day.isoformat(),
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "position_count": len(positions),
             "total_budget": total_budget,
             "total_pnl": total_pnl,

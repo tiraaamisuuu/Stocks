@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pandas as pd
 import pandas_market_calendars as mcal
@@ -13,9 +13,9 @@ class MarketClock:
         self.calendar = mcal.get_calendar(exchange)
 
     def session_info(self, now: datetime | None = None) -> SessionInfo:
-        moment = now or datetime.now(timezone.utc)
+        moment = now or datetime.now(UTC)
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
+            moment = moment.replace(tzinfo=UTC)
         moment_stamp = pd.Timestamp(moment).tz_convert("UTC")
         schedule = self.calendar.schedule(
             start_date=(moment.date() - timedelta(days=1)).isoformat(),

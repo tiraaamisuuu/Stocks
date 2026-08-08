@@ -9,7 +9,6 @@ import pandas as pd
 from paperalpha.config import FACTOR_WEIGHTS, MIN_HISTORY_ROWS
 from paperalpha.domain import NewsItem, TickerAnalysis
 
-
 RAW_FACTORS = ("momentum", "trend", "risk", "volume")
 
 
@@ -34,7 +33,9 @@ def price_metrics(frame: pd.DataFrame) -> dict[str, float]:
     if len(close) < MIN_HISTORY_ROWS:
         raise ValueError(f"At least {MIN_HISTORY_ROWS} valid closes are required.")
     returns = close.pct_change().replace([np.inf, -np.inf], np.nan).dropna()
-    volume = pd.to_numeric(frame.get("Volume", pd.Series(index=frame.index, dtype=float)), errors="coerce")
+    volume = pd.to_numeric(
+        frame.get("Volume", pd.Series(index=frame.index, dtype=float)), errors="coerce"
+    )
 
     latest = float(close.iloc[-1])
     return_5d = float(latest / close.iloc[-6] - 1)
@@ -149,7 +150,9 @@ def rank_tickers(
         if metrics["rsi_14"] >= 70:
             warnings.append("RSI is above 70, which can indicate an overextended move.")
 
-        public_metrics = {key: value for key, value in metrics.items() if not key.startswith("raw_")}
+        public_metrics = {
+            key: value for key, value in metrics.items() if not key.startswith("raw_")
+        }
         analyses.append(
             TickerAnalysis(
                 ticker=ticker,

@@ -119,7 +119,9 @@ def _performance_metrics(
     elapsed_days = max(1, (pd.Timestamp(curve.index[-1]) - pd.Timestamp(curve.index[0])).days)
     annualized = (1 + total_return) ** (365.25 / elapsed_days) - 1 if total_return > -1 else -1.0
     returns = trades["net_return"].astype(float)
-    periods_per_year = 252 / max(1.0, float((trades["exit_date"] - trades["entry_date"]).dt.days.mean()))
+    periods_per_year = 252 / max(
+        1.0, float((trades["exit_date"] - trades["entry_date"]).dt.days.mean())
+    )
     sharpe = (
         float(returns.mean() / returns.std(ddof=0) * np.sqrt(periods_per_year))
         if float(returns.std(ddof=0)) > 0

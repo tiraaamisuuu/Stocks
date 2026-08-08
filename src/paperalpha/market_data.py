@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date, timedelta
-from typing import Iterable
 
 import pandas as pd
 import yfinance as yf
@@ -32,7 +32,9 @@ class YahooMarketData:
     """
 
     def daily_history(self, tickers: Iterable[str], period: str = "1y") -> dict[str, pd.DataFrame]:
-        symbols = list(dict.fromkeys(symbol.upper().strip() for symbol in tickers if symbol.strip()))
+        symbols = list(
+            dict.fromkeys(symbol.upper().strip() for symbol in tickers if symbol.strip())
+        )
         if not symbols:
             return {}
 
@@ -118,7 +120,9 @@ class YahooMarketData:
                 timeout=15,
             )
         except Exception as exc:
-            raise MarketDataError(f"Could not load the {session_date} close for {ticker}: {exc}") from exc
+            raise MarketDataError(
+                f"Could not load the {session_date} close for {ticker}: {exc}"
+            ) from exc
         cleaned = _clean_frame(frame)
         if cleaned.empty:
             raise MarketDataError(f"No official close is available for {ticker} on {session_date}.")

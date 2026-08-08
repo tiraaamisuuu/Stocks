@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -43,9 +43,9 @@ class PublicTraderSignals:
         as_of: datetime | None = None,
         half_life_days: float = 60.0,
     ) -> tuple[dict[str, float], dict[str, int]]:
-        moment = as_of or datetime.now(timezone.utc)
+        moment = as_of or datetime.now(UTC)
         if moment.tzinfo is None:
-            moment = moment.replace(tzinfo=timezone.utc)
+            moment = moment.replace(tzinfo=UTC)
         moment_stamp = pd.Timestamp(moment)
         frame = self.load()
         frame = frame[frame["disclosed_at"] <= moment_stamp]
