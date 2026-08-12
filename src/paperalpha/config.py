@@ -25,6 +25,7 @@ DEFAULT_DB_PATH = STATE_DIR / "paperalpha.db"
 YFINANCE_CACHE_DIR = STATE_DIR / "yfinance-cache"
 DEFAULT_TRADER_SIGNALS_PATH = DATA_DIR / "trader_signals.csv"
 UNIVERSE_CACHE_PATH = STATE_DIR / "us_listed_stocks.csv"
+NOTIFICATION_CONFIG_PATH = STATE_DIR / "notifications.json"
 
 
 def initialize_runtime_files() -> None:

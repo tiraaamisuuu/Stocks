@@ -22,6 +22,8 @@ orders, connect to a brokerage, or present its score as a probability of profit.
 - Persists positions and one-minute snapshots in SQLite.
 - Automatically closes each paper position at that session's official closing price.
 - Generates JSON and CSV end-of-day reports.
+- Sends optional iPhone watchlist, paper-entry, progress, and closing P/L notifications through
+  ntfy, with a one-command automated paper-trading day runner.
 - Includes a two-year walk-forward test with next-session execution and configurable costs.
 - Keeps market-data, scoring, storage, and presentation code independently replaceable.
 
@@ -158,6 +160,20 @@ paperalpha-monitor --once
 Runtime data is stored under `state/` and intentionally excluded from Git. When a session closes,
 the monitor saves `state/reports/YYYY-MM-DD.json` and `.csv`.
 
+## iPhone alerts and one-day automation
+
+For a controlled buy-at-open/sell-at-close paper experiment, install the
+[ntfy iOS app](https://apps.apple.com/app/ntfy/id1625396347), then run this on the always-on laptop:
+
+```powershell
+.\scripts\start_paper_day.ps1 -Budget 1000 -Fractional
+```
+
+On first use the script generates a secret notification topic, walks through the phone
+subscription, sends a connection test, and keeps running until the official closing report is
+complete. The ledger prevents a restart from opening a duplicate paper position for that session.
+See [the complete iPhone alert setup](docs/IPHONE_ALERTS.md) for behavior and security notes.
+
 ## Public trader disclosures
 
 PaperAlpha deliberately does not scrape social-media claims or pretend that delayed filings are
@@ -214,6 +230,8 @@ src/paperalpha/
   storage.py                  SQLite positions and snapshots
   market_clock.py             NYSE sessions, holidays, and closes
   monitor.py                  Background polling and automatic close
+  notifications.py            ntfy configuration and iPhone message delivery
+  day_trader.py                One-position session automation state machine
   reporting.py                End-of-day JSON/CSV reports
   backtest.py                 Walk-forward price-factor evaluation
 tests/                         Deterministic unit and integration tests
