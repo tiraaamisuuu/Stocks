@@ -26,7 +26,7 @@ bash /home/YOUR_USER/Stocks/scripts/install_linux_server.sh \
 On first installation, the command prints a private ntfy topic. Subscribe to it in the iPhone
 ntfy app, then press Enter. The installer sends a test notification and starts the service.
 
-The service converts the GBP budget to USD at each simulated entry, uses fractional paper shares,
+The service converts the GBP budget to USD at each paper entry, uses fractional paper shares,
 allows at most one open position, and caps entries at five per market session. Realized paper gains
 and losses carry into the next entry. The notification topic is stored with
 owner-only permissions and is excluded from Git.

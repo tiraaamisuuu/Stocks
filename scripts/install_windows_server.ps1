@@ -86,7 +86,7 @@ try {
     Write-Host ""
     Write-Host "PaperAlpha server installed and started."
     Write-Host "Task:   $TaskName"
-    Write-Host "Budget: GBP $BudgetGbp (converted to USD at each simulated entry)"
+    Write-Host "Budget: GBP $BudgetGbp (converted to USD at each paper entry)"
     Write-Host "Log:    $projectRoot\state\paperalpha-server.log"
     Write-Host "The Windows account must stay signed in; locking the screen is fine."
 }

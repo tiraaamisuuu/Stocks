@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "paperalpha"
-version = "0.6.1"
+version = "0.6.2"
 description = "Explainable stock research and intraday paper-trading dashboard"
 readme = "README.md"
 requires-python = ">=3.11"

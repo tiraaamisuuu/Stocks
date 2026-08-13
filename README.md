@@ -175,7 +175,7 @@ For a controlled event-driven paper experiment, install the
 On first use the script generates a secret notification topic, walks through the phone
 subscription, sends a connection test, and keeps running until the official closing report is
 complete. The ledger prevents overlapping positions and enforces the configured daily entry cap
-even after a restart. Realized gains or losses carry into the next simulated entry.
+even after a restart. Realized gains or losses carry into the next paper entry.
 See [the complete iPhone alert setup](docs/IPHONE_ALERTS.md) for behavior and security notes.
 
 For an old Windows laptop that should remain online across market days, use the scheduled-task

@@ -119,7 +119,7 @@ systemctl enable --now "$service_name.service"
 
 printf '\nPaperAlpha is installed and running.\n'
 printf 'Service: %s.service\n' "$service_name"
-printf 'Budget:  GBP %s, converted to USD at each simulated entry\n' "$budget_gbp"
+printf 'Budget:  GBP %s, converted to USD at each paper entry\n' "$budget_gbp"
 printf 'Limit:   %s paper trades per market session\n' "$max_trades_per_day"
 printf 'Status:  systemctl status %s --no-pager\n' "$service_name"
 printf 'Logs:    journalctl -u %s -f\n' "$service_name"

@@ -24,7 +24,7 @@ The task:
 - has a noon daily trigger as a fallback;
 - restarts five minutes after a failure;
 - stays online across market days;
-- converts GBP 150 to USD at the exchange rate fetched when each simulated position opens;
+- converts GBP 150 to USD at the exchange rate fetched when each paper position opens;
 - uses fractional paper shares, prevents overlapping positions, and defaults to five entries per
   market session.
 
