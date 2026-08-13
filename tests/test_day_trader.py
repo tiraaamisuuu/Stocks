@@ -122,6 +122,84 @@ def test_paper_day_does_not_duplicate_existing_session_position(tmp_path, analys
     assert [position.id for position in store.positions()] == [existing.id]
 
 
+def test_paper_day_reuses_realized_balance_for_next_trade(tmp_path, analysis) -> None:
+    market_data = FakeMarketData()
+    store = PortfolioStore(tmp_path / "portfolio.db")
+    first = store.open_position(
+        analysis,
+        100,
+        opened_at=datetime(2026, 8, 12, 13, 31, tzinfo=UTC),
+    )
+    store.close_position(
+        first.id,
+        110,
+        closed_at=datetime(2026, 8, 12, 13, 45, tzinfo=UTC),
+    )
+    clock = MarketClock()
+    notifier = RecordingNotifier()
+    trader = DailyPaperTrader(
+        engine=FakeResearchEngine(analysis),
+        market_data=market_data,
+        store=store,
+        clock=clock,
+        monitor=PositionMonitor(
+            store,
+            market_data,
+            clock,
+            SessionReporter(tmp_path / "reports"),
+        ),
+        notifier=notifier,
+        config=PaperDayConfig(budget=100, fractional_shares=True, max_trades_per_day=5),
+    )
+
+    events = trader.step(datetime(2026, 8, 12, 14, 0, tzinfo=UTC))
+
+    positions = store.positions()
+    assert len(positions) == 2
+    assert positions[0].status == "OPEN"
+    assert positions[0].budget == 110
+    assert any("trade 2/5" in event for event in events)
+    buy_message = next(
+        message for title, message, _ in notifier.messages if title.startswith("PAPER BUY")
+    )
+    assert "Trade 2/5" in buy_message
+    assert "$110.00 available after today's +$10.00 realized P/L" in buy_message
+
+
+def test_paper_day_stops_after_configured_daily_trade_limit(tmp_path, analysis) -> None:
+    market_data = FakeMarketData()
+    store = PortfolioStore(tmp_path / "portfolio.db")
+    for offset in range(5):
+        opened_at = datetime(2026, 8, 12, 13, 31 + offset * 2, tzinfo=UTC)
+        position = store.open_position(analysis, 100, opened_at=opened_at)
+        store.close_position(
+            position.id,
+            100,
+            closed_at=datetime(2026, 8, 12, 13, 32 + offset * 2, tzinfo=UTC),
+        )
+    clock = MarketClock()
+    trader = DailyPaperTrader(
+        engine=FakeResearchEngine(analysis),
+        market_data=market_data,
+        store=store,
+        clock=clock,
+        monitor=PositionMonitor(
+            store,
+            market_data,
+            clock,
+            SessionReporter(tmp_path / "reports"),
+        ),
+        notifier=RecordingNotifier(),
+        config=PaperDayConfig(max_trades_per_day=5),
+    )
+
+    events = trader.step(datetime(2026, 8, 12, 15, 0, tzinfo=UTC))
+
+    assert len(store.positions()) == 5
+    assert store.positions(status="OPEN") == []
+    assert not any("Paper BUY" in event for event in events)
+
+
 def test_paper_day_converts_gbp_budget_at_entry_time(tmp_path, analysis) -> None:
     market_data = FakeMarketData()
     store = PortfolioStore(tmp_path / "portfolio.db")

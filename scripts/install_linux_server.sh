@@ -3,6 +3,7 @@ set -euo pipefail
 
 service_user=""
 budget_gbp="150"
+max_trades_per_day="5"
 service_name="paperalpha"
 project_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -14,6 +15,10 @@ while (($#)); do
             ;;
         --budget-gbp)
             budget_gbp="${2:?--budget-gbp requires a value}"
+            shift 2
+            ;;
+        --max-trades-per-day)
+            max_trades_per_day="${2:?--max-trades-per-day requires a value}"
             shift 2
             ;;
         --service-name)
@@ -38,6 +43,10 @@ fi
 if [[ ! $budget_gbp =~ ^[0-9]+([.][0-9]+)?$ ]] || \
     ! awk -v value="$budget_gbp" 'BEGIN { exit !(value > 0) }'; then
     printf '%s\n' '--budget-gbp must be a positive number.' >&2
+    exit 2
+fi
+if [[ ! $max_trades_per_day =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s\n' '--max-trades-per-day must be a positive whole number.' >&2
     exit 2
 fi
 if [[ ! $service_name =~ ^[a-zA-Z0-9_-]+$ ]]; then
@@ -86,7 +95,7 @@ User=$service_user
 Group=$service_group
 WorkingDirectory=$project_dir
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$venv_python -m paperalpha.day_trader --budget-gbp $budget_gbp --fractional --continuous --interval 60 --notification-config $notification_config
+ExecStart=$venv_python -m paperalpha.day_trader --budget-gbp $budget_gbp --fractional --continuous --interval 60 --max-trades-per-day $max_trades_per_day --notification-config $notification_config
 Restart=on-failure
 RestartSec=30s
 UMask=0077
@@ -107,5 +116,6 @@ systemctl enable --now "$service_name.service"
 printf '\nPaperAlpha is installed and running.\n'
 printf 'Service: %s.service\n' "$service_name"
 printf 'Budget:  GBP %s, converted to USD at each simulated entry\n' "$budget_gbp"
+printf 'Limit:   %s paper trades per market session\n' "$max_trades_per_day"
 printf 'Status:  systemctl status %s --no-pager\n' "$service_name"
 printf 'Logs:    journalctl -u %s -f\n' "$service_name"

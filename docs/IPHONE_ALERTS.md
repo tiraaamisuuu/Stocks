@@ -28,8 +28,9 @@ which Git ignores. Do not put the topic in a screenshot, README, commit, or publ
 
 - Within two hours of the regular open, the laptop performs the full-market scan and sends a
   **watchlist** alert. This explicitly says to wait.
-- After the regular market opens, it fetches a fresh price, creates one local paper position, and
-  sends a **PAPER BUY** alert.
+- After the regular market opens, it fetches a fresh price, creates a local paper position, and
+  sends a **PAPER BUY** alert. It can re-scan after an exit, but permits only one open position and
+  defaults to at most five entries per market session.
 - It records prices and evaluates exit rules every minute. It sends a single **PAPER SELL** as soon
   as the 3% hard stop, 5% take-profit, trailing stop, or strong reversal rule fires. The message
   includes the exact reason, exit price, and paper P/L.
@@ -37,8 +38,8 @@ which Git ignores. Do not put the topic in a screenshot, README, commit, or publ
 - It does not send hourly status noise; notifications describe `WAIT`, `BUY`, or `SELL` actions.
 - The command exits only after the closing position and report have been persisted.
 
-If the laptop or internet connection drops, restart the same command. The SQLite ledger prevents
-it from opening a second position for the same session.
+If the laptop or internet connection drops, restart the same command. The SQLite ledger preserves
+the open-position guard and daily trade count.
 
 ## Useful commands
 
@@ -58,7 +59,7 @@ paperalpha-day --budget 2500
 Use a GBP-denominated budget that is converted at the simulated entry time:
 
 ```powershell
-paperalpha-day --budget-gbp 150 --fractional
+paperalpha-day --budget-gbp 150 --fractional --max-trades-per-day 5
 ```
 
 For an always-on Windows laptop, follow the [server setup guide](SERVER_SETUP.md).

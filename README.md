@@ -1,8 +1,9 @@
 # PaperAlpha
 
 PaperAlpha is an explainable stock-research and intraday paper-trading dashboard. It ranks a
-configurable universe of liquid US stocks, sizes a virtual order from a user-provided budget,
-tracks the position through the session, and writes an end-of-day profit/loss report.
+configurable universe of liquid US stocks, sizes virtual orders from a user-provided budget,
+tracks up to a configured number of sequential positions, and writes an end-of-day profit/loss
+report.
 
 The project is designed for research and software-engineering demonstration. It does not place
 orders, connect to a brokerage, or present its score as a probability of profit.
@@ -19,7 +20,8 @@ orders, connect to a brokerage, or present its score as a probability of profit.
   score, signal strength, factor attribution, warnings, and recent headlines.
 - Reprices the order at entry and refuses to invent an executable price when the NYSE is closed.
 - Uses the official NYSE calendar, including holidays and early closes.
-- Persists positions and one-minute snapshots in SQLite.
+- Persists positions and one-minute snapshots in SQLite, with at most one open position and five
+  entries per session by default.
 - Evaluates event-driven hard-stop, take-profit, trailing-stop, and momentum-reversal exits every
   minute, with the official close as the final fallback.
 - Generates JSON and CSV end-of-day reports.
@@ -172,7 +174,8 @@ For a controlled event-driven paper experiment, install the
 
 On first use the script generates a secret notification topic, walks through the phone
 subscription, sends a connection test, and keeps running until the official closing report is
-complete. The ledger prevents a restart from opening a duplicate paper position for that session.
+complete. The ledger prevents overlapping positions and enforces the configured daily entry cap
+even after a restart. Realized gains or losses carry into the next simulated entry.
 See [the complete iPhone alert setup](docs/IPHONE_ALERTS.md) for behavior and security notes.
 
 For an old Windows laptop that should remain online across market days, use the scheduled-task
@@ -190,7 +193,8 @@ For a Debian or Ubuntu home server, install the systemd service instead:
 
 ```bash
 su -
-bash /home/YOUR_USER/Stocks/scripts/install_linux_server.sh --user YOUR_USER --budget-gbp 150
+bash /home/YOUR_USER/Stocks/scripts/install_linux_server.sh --user YOUR_USER \
+  --budget-gbp 150 --max-trades-per-day 5
 ```
 
 See the [always-on Linux server guide](docs/LINUX_SERVER_SETUP.md) for installation, logs, updates,
@@ -254,7 +258,7 @@ src/paperalpha/
   monitor.py                  Background polling and automatic close
   intraday_signals.py         Event-driven paper SELL rules and diagnostics
   notifications.py            ntfy configuration and iPhone message delivery
-  day_trader.py                One-position session automation state machine
+  day_trader.py                Bounded multi-trade session automation state machine
   reporting.py                End-of-day JSON/CSV reports
   backtest.py                 Walk-forward price-factor evaluation
 tests/                         Deterministic unit and integration tests

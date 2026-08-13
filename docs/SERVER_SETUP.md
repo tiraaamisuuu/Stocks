@@ -25,7 +25,8 @@ The task:
 - restarts five minutes after a failure;
 - stays online across market days;
 - converts GBP 150 to USD at the exchange rate fetched when each simulated position opens;
-- uses fractional paper shares and prevents duplicate positions for a market session.
+- uses fractional paper shares, prevents overlapping positions, and defaults to five entries per
+  market session.
 
 The Windows account must remain signed in. The screen can be locked, but signing out stops an
 interactive scheduled task. Disable sleep and hibernation on the server and leave its internet

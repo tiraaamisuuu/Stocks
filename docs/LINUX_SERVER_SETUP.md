@@ -19,14 +19,16 @@ Run the installer as root, replacing `YOUR_USER` with that Linux account:
 su -
 bash /home/YOUR_USER/Stocks/scripts/install_linux_server.sh \
   --user YOUR_USER \
-  --budget-gbp 150
+  --budget-gbp 150 \
+  --max-trades-per-day 5
 ```
 
 On first installation, the command prints a private ntfy topic. Subscribe to it in the iPhone
 ntfy app, then press Enter. The installer sends a test notification and starts the service.
 
 The service converts the GBP budget to USD at each simulated entry, uses fractional paper shares,
-and prevents duplicate positions for a market session. The notification topic is stored with
+allows at most one open position, and caps entries at five per market session. Realized paper gains
+and losses carry into the next entry. The notification topic is stored with
 owner-only permissions and is excluded from Git.
 
 ## Check and maintain it
@@ -44,7 +46,8 @@ git pull
 su -
 bash /home/YOUR_USER/Stocks/scripts/install_linux_server.sh \
   --user YOUR_USER \
-  --budget-gbp 150
+  --budget-gbp 150 \
+  --max-trades-per-day 5
 ```
 
 Remove the service while keeping its database and reports:

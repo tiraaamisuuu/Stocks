@@ -47,12 +47,13 @@ class PaperDayConfig:
     include_news: bool = True
     deep_scan_size: int = DEFAULT_DEEP_SCAN_SIZE
     prepare_minutes: int = 120
+    max_trades_per_day: int = 5
     dashboard_url: str = ""
     exit_rules: IntradayExitConfig = IntradayExitConfig()
 
 
 class DailyPaperTrader:
-    """Run one transparent buy-at-open/sell-at-close paper experiment."""
+    """Run a bounded sequence of transparent intraday paper trades."""
 
     def __init__(
         self,
@@ -102,13 +103,16 @@ class DailyPaperTrader:
                 for position in self.store.positions()
                 if position.session_date == session_date
             ]
-            if not todays_positions:
+            open_positions = self.store.positions(status="OPEN")
+            if len(todays_positions) < self.config.max_trades_per_day and not open_positions:
                 if self.candidate is None or self.prepared_for != session.market_open.date():
                     self._prepare(session.market_open.date(), moment)
-                position = self._open_paper_position(moment)
+                trade_number = len(todays_positions) + 1
+                position = self._open_paper_position(moment, session_date, trade_number)
                 events.append(
                     f"Paper BUY {position.ticker}: {position.shares:,.6g} shares "
-                    f"at ${position.entry_price:,.2f}."
+                    f"at ${position.entry_price:,.2f} "
+                    f"(trade {trade_number}/{self.config.max_trades_per_day})."
                 )
 
         before = {position.id: position.status for position in self.store.positions(status="OPEN")}
@@ -162,11 +166,11 @@ class DailyPaperTrader:
             click_url=self.config.dashboard_url,
         )
 
-    def _open_paper_position(self, moment: datetime):
+    def _open_paper_position(self, moment: datetime, session_date: str, trade_number: int):
         if self.candidate is None:
             raise RuntimeError("A candidate must be prepared before opening a paper position.")
         live_price = self.market_data.latest_price(self.candidate.ticker)
-        budget, budget_description = self._paper_budget()
+        budget, budget_description = self._paper_budget(session_date)
         analysis = replace(self.candidate, price=live_price)
         position = self.store.open_position(
             analysis,
@@ -178,7 +182,8 @@ class DailyPaperTrader:
             f"PAPER BUY - {position.ticker}",
             f"ACTION: BUY. Simulated entry: {position.shares:,.6g} shares at "
             f"${position.entry_price:,.2f}; "
-            f"paper budget {budget_description}. Hold for today's experiment until the "
+            f"paper budget {budget_description}. Trade {trade_number}/"
+            f"{self.config.max_trades_per_day}. Hold until an exit rule or the "
             "official close. No real order was placed.",
             priority="high",
             tags=("large_green_circle", "chart_with_upwards_trend"),
@@ -186,14 +191,35 @@ class DailyPaperTrader:
         )
         return position
 
-    def _paper_budget(self) -> tuple[float, str]:
+    def _paper_budget(self, session_date: str) -> tuple[float, str]:
+        closed_pnl = sum(
+            position.pnl or 0.0
+            for position in self.store.positions(status="CLOSED")
+            if position.session_date == session_date
+        )
         if self.config.budget_gbp is None:
-            return self.config.budget, f"${self.config.budget:,.2f}"
-        gbp_usd = self.market_data.latest_price("GBPUSD=X")
-        usd_budget = self.config.budget_gbp * gbp_usd
+            base_budget = self.config.budget
+            budget_description = f"${base_budget:,.2f} starting balance"
+        else:
+            gbp_usd = self.market_data.latest_price("GBPUSD=X")
+            base_budget = self.config.budget_gbp * gbp_usd
+            budget_description = (
+                f"£{self.config.budget_gbp:,.2f} "
+                f"(${base_budget:,.2f} at GBP/USD {gbp_usd:.4f}) starting balance"
+            )
+        available_budget = base_budget + closed_pnl
+        if available_budget <= 0:
+            raise RuntimeError("The simulated daily balance has been exhausted.")
+        if closed_pnl:
+            pnl_description = (
+                f"+${closed_pnl:,.2f}" if closed_pnl > 0 else f"-${abs(closed_pnl):,.2f}"
+            )
+            budget_description += (
+                f"; ${available_budget:,.2f} available after today's {pnl_description} realized P/L"
+            )
         return (
-            usd_budget,
-            f"£{self.config.budget_gbp:,.2f} (${usd_budget:,.2f} at GBP/USD {gbp_usd:.4f})",
+            available_budget,
+            budget_description,
         )
 
     def _apply_intraday_exit_rules(self, moment: datetime) -> list[str]:
@@ -229,6 +255,8 @@ class DailyPaperTrader:
                 f"Paper SELL {closed.ticker} at ${closed.exit_price:,.2f}: "
                 f"{decision.code}; P/L ${closed.pnl:+,.2f}."
             )
+            self.candidate = None
+            self.prepared_for = None
         return events
 
 
@@ -258,6 +286,7 @@ def build_day_trader(args: argparse.Namespace) -> DailyPaperTrader:
             include_news=not args.no_news,
             deep_scan_size=args.deep_scan_size,
             prepare_minutes=args.prepare_minutes,
+            max_trades_per_day=args.max_trades_per_day,
             dashboard_url=args.dashboard_url,
             exit_rules=IntradayExitConfig(
                 hard_stop_pct=args.stop_loss_pct,
@@ -274,7 +303,7 @@ def build_day_trader(args: argparse.Namespace) -> DailyPaperTrader:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run one automated, notification-backed PaperAlpha paper-trading day."
+        description="Run a bounded, notification-backed PaperAlpha paper-trading day."
     )
     budget_group = parser.add_mutually_exclusive_group()
     budget_group.add_argument("--budget", type=float, default=None, help="Paper budget in USD.")
@@ -283,6 +312,12 @@ def main() -> None:
     parser.add_argument("--no-news", action="store_true", help="Skip current headline sentiment.")
     parser.add_argument("--deep-scan-size", type=int, default=DEFAULT_DEEP_SCAN_SIZE)
     parser.add_argument("--prepare-minutes", type=int, default=120)
+    parser.add_argument(
+        "--max-trades-per-day",
+        type=int,
+        default=5,
+        help="Maximum paper entries per market session (default: 5).",
+    )
     parser.add_argument("--stop-loss-pct", type=float, default=3.0)
     parser.add_argument("--take-profit-pct", type=float, default=5.0)
     parser.add_argument("--trailing-activation-pct", type=float, default=2.0)
@@ -307,6 +342,8 @@ def main() -> None:
         parser.error("--budget-gbp must be positive.")
     if args.interval < 15:
         parser.error("--interval must be at least 15 seconds.")
+    if args.max_trades_per_day < 1:
+        parser.error("--max-trades-per-day must be at least 1.")
     if (
         min(
             args.stop_loss_pct,
