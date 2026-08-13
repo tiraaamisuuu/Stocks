@@ -85,9 +85,9 @@ def test_paper_day_prepares_buys_and_closes_with_notifications(tmp_path, analysi
     assert position.status == "CLOSED"
     assert position.entry_price == 101
     assert position.exit_price == 104
-    assert any(title.startswith("PaperAlpha watchlist") for title, *_ in notifier.messages)
-    assert any(title == "PAPER BUY · TEST" for title, *_ in notifier.messages)
-    assert any(title == "PAPER SELL · TEST" for title, *_ in notifier.messages)
+    assert any(title.startswith("WAIT - PaperAlpha watchlist") for title, *_ in notifier.messages)
+    assert any(title == "PAPER BUY - TEST" for title, *_ in notifier.messages)
+    assert any(title == "PAPER SELL - TEST" for title, *_ in notifier.messages)
     assert trader.session_complete(after_close)
 
 
@@ -150,3 +150,44 @@ def test_paper_day_converts_gbp_budget_at_entry_time(tmp_path, analysis) -> None
         message for title, message, _ in notifier.messages if title.startswith("PAPER BUY")
     )
     assert "£150.00 ($187.50 at GBP/USD 1.2500)" in buy_message
+
+
+def test_paper_day_sends_one_event_driven_sell_alert(tmp_path, analysis) -> None:
+    class FallingMarketData(FakeMarketData):
+        def __init__(self) -> None:
+            self.prices = iter((100.0, 100.0, 96.9))
+
+        def latest_price(self, ticker: str) -> float:
+            if ticker == "GBPUSD=X":
+                return 1.25
+            return next(self.prices)
+
+    market_data = FallingMarketData()
+    store = PortfolioStore(tmp_path / "portfolio.db")
+    notifier = RecordingNotifier()
+    clock = MarketClock()
+    trader = DailyPaperTrader(
+        engine=FakeResearchEngine(analysis),
+        market_data=market_data,
+        store=store,
+        clock=clock,
+        monitor=PositionMonitor(
+            store,
+            market_data,
+            clock,
+            SessionReporter(tmp_path / "reports"),
+        ),
+        notifier=notifier,
+        config=PaperDayConfig(budget=150, fractional_shares=True),
+    )
+
+    trader.step(datetime(2026, 8, 12, 13, 31, tzinfo=UTC))
+    events = trader.step(datetime(2026, 8, 12, 13, 32, tzinfo=UTC))
+
+    position = store.positions()[0]
+    sell_messages = [item for item in notifier.messages if item[0] == "PAPER SELL - TEST"]
+    assert position.status == "CLOSED"
+    assert position.exit_price == 96.9
+    assert len(sell_messages) == 1
+    assert "ACTION: SELL" in sell_messages[0][1]
+    assert any("HARD_STOP" in event for event in events)

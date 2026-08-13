@@ -30,9 +30,11 @@ which Git ignores. Do not put the topic in a screenshot, README, commit, or publ
   **watchlist** alert. This explicitly says to wait.
 - After the regular market opens, it fetches a fresh price, creates one local paper position, and
   sends a **PAPER BUY** alert.
-- It records prices every minute and sends a quiet progress notification once per hour.
-- At the official close, it records the closing price, writes the JSON/CSV report, and sends a
-  **PAPER SELL** notification containing final profit or loss.
+- It records prices and evaluates exit rules every minute. It sends a single **PAPER SELL** as soon
+  as the 3% hard stop, 5% take-profit, trailing stop, or strong reversal rule fires. The message
+  includes the exact reason, exit price, and paper P/L.
+- If no intraday exit fires, it exits at the official close and writes the JSON/CSV report.
+- It does not send hourly status noise; notifications describe `WAIT`, `BUY`, or `SELL` actions.
 - The command exits only after the closing position and report have been persisted.
 
 If the laptop or internet connection drops, restart the same command. The SQLite ledger prevents

@@ -20,7 +20,8 @@ orders, connect to a brokerage, or present its score as a probability of profit.
 - Reprices the order at entry and refuses to invent an executable price when the NYSE is closed.
 - Uses the official NYSE calendar, including holidays and early closes.
 - Persists positions and one-minute snapshots in SQLite.
-- Automatically closes each paper position at that session's official closing price.
+- Evaluates event-driven hard-stop, take-profit, trailing-stop, and momentum-reversal exits every
+  minute, with the official close as the final fallback.
 - Generates JSON and CSV end-of-day reports.
 - Sends optional iPhone watchlist, paper-entry, progress, and closing P/L notifications through
   ntfy, with a one-command automated paper-trading day runner.
@@ -162,7 +163,7 @@ the monitor saves `state/reports/YYYY-MM-DD.json` and `.csv`.
 
 ## iPhone alerts and one-day automation
 
-For a controlled buy-at-open/sell-at-close paper experiment, install the
+For a controlled event-driven paper experiment, install the
 [ntfy iOS app](https://apps.apple.com/app/ntfy/id1625396347), then run this on the always-on laptop:
 
 ```powershell
@@ -251,6 +252,7 @@ src/paperalpha/
   storage.py                  SQLite positions and snapshots
   market_clock.py             NYSE sessions, holidays, and closes
   monitor.py                  Background polling and automatic close
+  intraday_signals.py         Event-driven paper SELL rules and diagnostics
   notifications.py            ntfy configuration and iPhone message delivery
   day_trader.py                One-position session automation state machine
   reporting.py                End-of-day JSON/CSV reports

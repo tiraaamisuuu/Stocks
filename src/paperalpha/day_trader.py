@@ -15,6 +15,7 @@ from paperalpha.config import (
     initialize_runtime_files,
 )
 from paperalpha.domain import TickerAnalysis
+from paperalpha.intraday_signals import IntradayExitConfig, evaluate_intraday_exit
 from paperalpha.market_clock import MarketClock
 from paperalpha.market_data import MarketDataError, YahooMarketData
 from paperalpha.monitor import PositionMonitor
@@ -46,8 +47,8 @@ class PaperDayConfig:
     include_news: bool = True
     deep_scan_size: int = DEFAULT_DEEP_SCAN_SIZE
     prepare_minutes: int = 120
-    update_minutes: int = 60
     dashboard_url: str = ""
+    exit_rules: IntradayExitConfig = IntradayExitConfig()
 
 
 class DailyPaperTrader:
@@ -73,7 +74,6 @@ class DailyPaperTrader:
         self.config = config
         self.candidate: TickerAnalysis | None = None
         self.prepared_for: date | None = None
-        self.last_update_notice: datetime | None = None
 
     def step(self, now: datetime | None = None) -> list[str]:
         moment = now or datetime.now(UTC)
@@ -118,8 +118,8 @@ class DailyPaperTrader:
             position = self.store.get_position(position_id)
             if position is not None and position.status == "CLOSED":
                 self.notifier.send(
-                    f"PAPER SELL · {position.ticker}",
-                    f"Session complete at ${position.exit_price:,.2f}. "
+                    f"PAPER SELL - {position.ticker}",
+                    f"ACTION: SELL. Official market-close exit at ${position.exit_price:,.2f}. "
                     f"P/L ${position.pnl:,.2f} ({position.return_pct:+.2f}%). "
                     "No real order was placed.",
                     priority="high",
@@ -128,7 +128,7 @@ class DailyPaperTrader:
                 )
 
         if session.state == "open":
-            self._maybe_send_progress(moment)
+            events.extend(self._apply_intraday_exit_rules(moment))
         return events
 
     def session_complete(self, now: datetime | None = None) -> bool:
@@ -154,8 +154,8 @@ class DailyPaperTrader:
         self.prepared_for = session_date
         pick = self.candidate
         self.notifier.send(
-            f"PaperAlpha watchlist · {pick.ticker}",
-            f"Pre-market candidate for {session_date}: {pick.ticker} at the latest reference "
+            f"WAIT - PaperAlpha watchlist - {pick.ticker}",
+            f"ACTION: WAIT. Pre-market candidate for {session_date}: {pick.ticker} at the latest reference "
             f"price ${pick.price:,.2f}; score {pick.score:.1f}/100 and signal strength "
             f"{pick.signal_strength:.0f}/100. WAIT for the separate paper BUY alert after open.",
             tags=("eyes", "mag"),
@@ -175,15 +175,15 @@ class DailyPaperTrader:
             fractional_shares=self.config.fractional_shares,
         )
         self.notifier.send(
-            f"PAPER BUY · {position.ticker}",
-            f"Simulated entry: {position.shares:,.6g} shares at ${position.entry_price:,.2f}; "
+            f"PAPER BUY - {position.ticker}",
+            f"ACTION: BUY. Simulated entry: {position.shares:,.6g} shares at "
+            f"${position.entry_price:,.2f}; "
             f"paper budget {budget_description}. Hold for today's experiment until the "
             "official close. No real order was placed.",
             priority="high",
             tags=("large_green_circle", "chart_with_upwards_trend"),
             click_url=self.config.dashboard_url,
         )
-        self.last_update_notice = moment
         return position
 
     def _paper_budget(self) -> tuple[float, str]:
@@ -196,28 +196,40 @@ class DailyPaperTrader:
             f"£{self.config.budget_gbp:,.2f} (${usd_budget:,.2f} at GBP/USD {gbp_usd:.4f})",
         )
 
-    def _maybe_send_progress(self, moment: datetime) -> None:
-        if self.last_update_notice is not None and moment - self.last_update_notice < timedelta(
-            minutes=self.config.update_minutes
-        ):
-            return
-        open_positions = self.store.positions(status="OPEN")
-        if not open_positions:
-            return
-        position = open_positions[0]
-        snapshots = self.store.snapshots(position.id)
-        if snapshots.empty:
-            return
-        latest = snapshots.iloc[-1]
-        self.notifier.send(
-            f"PaperAlpha update · {position.ticker}",
-            f"Latest ${float(latest['price']):,.2f}; paper P/L "
-            f"${float(latest['pnl']):+,.2f}. Planned exit remains today's official close.",
-            priority="low",
-            tags=("hourglass_flowing_sand",),
-            click_url=self.config.dashboard_url,
-        )
-        self.last_update_notice = moment
+    def _apply_intraday_exit_rules(self, moment: datetime) -> list[str]:
+        events: list[str] = []
+        for position in self.store.positions(status="OPEN"):
+            decision = evaluate_intraday_exit(
+                position,
+                self.store.snapshots(position.id),
+                moment,
+                self.config.exit_rules,
+            )
+            if decision is None:
+                continue
+            closed = self.store.close_position(position.id, decision.price, closed_at=moment)
+            self.monitor.reporter.write(
+                position.session_date,
+                [
+                    item
+                    for item in self.store.positions(status="CLOSED")
+                    if item.session_date == position.session_date
+                ],
+            )
+            self.notifier.send(
+                f"PAPER SELL - {closed.ticker}",
+                f"ACTION: SELL. {decision.reason.capitalize()}. Simulated exit "
+                f"${closed.exit_price:,.2f}; P/L ${closed.pnl:+,.2f} "
+                f"({closed.return_pct:+.2f}%). No real order was placed.",
+                priority="high",
+                tags=("red_circle", "chart_with_downwards_trend"),
+                click_url=self.config.dashboard_url,
+            )
+            events.append(
+                f"Paper SELL {closed.ticker} at ${closed.exit_price:,.2f}: "
+                f"{decision.code}; P/L ${closed.pnl:+,.2f}."
+            )
+        return events
 
 
 def build_day_trader(args: argparse.Namespace) -> DailyPaperTrader:
@@ -246,8 +258,16 @@ def build_day_trader(args: argparse.Namespace) -> DailyPaperTrader:
             include_news=not args.no_news,
             deep_scan_size=args.deep_scan_size,
             prepare_minutes=args.prepare_minutes,
-            update_minutes=args.update_minutes,
             dashboard_url=args.dashboard_url,
+            exit_rules=IntradayExitConfig(
+                hard_stop_pct=args.stop_loss_pct,
+                take_profit_pct=args.take_profit_pct,
+                trailing_activation_pct=args.trailing_activation_pct,
+                trailing_drawdown_pct=args.trailing_drawdown_pct,
+                reversal_lookback_minutes=args.reversal_lookback_minutes,
+                reversal_drop_pct=args.reversal_drop_pct,
+                minimum_hold_minutes=args.minimum_hold_minutes,
+            ),
         ),
     )
 
@@ -263,7 +283,13 @@ def main() -> None:
     parser.add_argument("--no-news", action="store_true", help="Skip current headline sentiment.")
     parser.add_argument("--deep-scan-size", type=int, default=DEFAULT_DEEP_SCAN_SIZE)
     parser.add_argument("--prepare-minutes", type=int, default=120)
-    parser.add_argument("--update-minutes", type=int, default=60)
+    parser.add_argument("--stop-loss-pct", type=float, default=3.0)
+    parser.add_argument("--take-profit-pct", type=float, default=5.0)
+    parser.add_argument("--trailing-activation-pct", type=float, default=2.0)
+    parser.add_argument("--trailing-drawdown-pct", type=float, default=1.5)
+    parser.add_argument("--reversal-lookback-minutes", type=int, default=5)
+    parser.add_argument("--reversal-drop-pct", type=float, default=1.25)
+    parser.add_argument("--minimum-hold-minutes", type=int, default=10)
     parser.add_argument("--interval", type=int, default=60, help="Polling interval in seconds.")
     parser.add_argument("--dashboard-url", default="", help="Optional URL opened from alerts.")
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH))
@@ -281,8 +307,19 @@ def main() -> None:
         parser.error("--budget-gbp must be positive.")
     if args.interval < 15:
         parser.error("--interval must be at least 15 seconds.")
-    if args.update_minutes < 15:
-        parser.error("--update-minutes must be at least 15.")
+    if (
+        min(
+            args.stop_loss_pct,
+            args.take_profit_pct,
+            args.trailing_activation_pct,
+            args.trailing_drawdown_pct,
+            args.reversal_drop_pct,
+        )
+        <= 0
+    ):
+        parser.error("Intraday percentage thresholds must be positive.")
+    if args.reversal_lookback_minutes < 2 or args.minimum_hold_minutes < 2:
+        parser.error("Intraday time windows must be at least 2 minutes.")
 
     initialize_runtime_files()
     trader = build_day_trader(args)
