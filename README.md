@@ -185,6 +185,16 @@ It creates an isolated environment, walks through ntfy setup, starts PaperAlpha 
 registers automatic sign-in/daily triggers with failure restarts. See the
 [always-on Windows server guide](docs/SERVER_SETUP.md).
 
+For a Debian or Ubuntu home server, install the systemd service instead:
+
+```bash
+su -
+bash /home/YOUR_USER/Stocks/scripts/install_linux_server.sh --user YOUR_USER --budget-gbp 150
+```
+
+See the [always-on Linux server guide](docs/LINUX_SERVER_SETUP.md) for installation, logs, updates,
+and removal.
+
 ## Public trader disclosures
 
 PaperAlpha deliberately does not scrape social-media claims or pretend that delayed filings are
