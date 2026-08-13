@@ -72,16 +72,20 @@ runuser -u "$service_user" -- env HOME="$service_home" \
 runuser -u "$service_user" -- env HOME="$service_home" \
     "$venv_python" -m pip install -e "$project_dir"
 
+notification_config_created="false"
 if [[ ! -f $notification_config ]]; then
     runuser -u "$service_user" -- env HOME="$service_home" \
         "$venv_python" -m paperalpha.notifications setup --config "$notification_config"
     printf '\nSubscribe the iPhone ntfy app to the topic printed above.\n'
     read -r -p 'Press Enter after the topic is subscribed on the phone: '
+    notification_config_created="true"
 fi
 chmod 600 "$notification_config"
 chown "$service_user:$service_group" "$notification_config"
-runuser -u "$service_user" -- env HOME="$service_home" \
-    "$venv_python" -m paperalpha.notifications test --config "$notification_config"
+if [[ $notification_config_created == "true" ]]; then
+    runuser -u "$service_user" -- env HOME="$service_home" \
+        "$venv_python" -m paperalpha.notifications test --config "$notification_config"
+fi
 
 cat >"$unit_path" <<EOF
 [Unit]

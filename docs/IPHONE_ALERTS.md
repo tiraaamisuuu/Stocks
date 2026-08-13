@@ -27,15 +27,17 @@ which Git ignores. Do not put the topic in a screenshot, README, commit, or publ
 ## What happens during the session
 
 - Within two hours of the regular open, the laptop performs the full-market scan and sends a
-  **watchlist** alert. This explicitly says to wait.
+  **WATCH ONLY — DO NOT BUY YET** alert. This is sent only before the market opens.
 - After the regular market opens, it fetches a fresh price, creates a local paper position, and
-  sends a **PAPER BUY** alert. It can re-scan after an exit, but permits only one open position and
+  sends a **SIMULATION: BUY — THEN HOLD** alert. Mid-session rescans skip the watch notification,
+  so an old `WATCH` message cannot appear after a new `BUY`. It permits only one open position and
   defaults to at most five entries per market session.
 - It records prices and evaluates exit rules every minute. It sends a single **PAPER SELL** as soon
   as the 3% hard stop, 5% take-profit, trailing stop, or strong reversal rule fires. The message
   includes the exact reason, exit price, and paper P/L.
 - If no intraday exit fires, it exits at the official close and writes the JSON/CSV report.
-- It does not send hourly status noise; notifications describe `WAIT`, `BUY`, or `SELL` actions.
+- It does not send hourly status noise; notification titles explicitly distinguish `STATUS ONLY`,
+  `WATCH ONLY`, `SIMULATION: BUY`, and `SIMULATION: SELL`.
 - The command exits only after the closing position and report have been persisted.
 
 If the laptop or internet connection drops, restart the same command. The SQLite ledger preserves

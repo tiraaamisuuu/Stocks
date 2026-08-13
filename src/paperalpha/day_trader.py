@@ -106,7 +106,7 @@ class DailyPaperTrader:
             open_positions = self.store.positions(status="OPEN")
             if len(todays_positions) < self.config.max_trades_per_day and not open_positions:
                 if self.candidate is None or self.prepared_for != session.market_open.date():
-                    self._prepare(session.market_open.date(), moment)
+                    self._prepare(session.market_open.date(), moment, notify_watchlist=False)
                 trade_number = len(todays_positions) + 1
                 position = self._open_paper_position(moment, session_date, trade_number)
                 events.append(
@@ -122,10 +122,11 @@ class DailyPaperTrader:
             position = self.store.get_position(position_id)
             if position is not None and position.status == "CLOSED":
                 self.notifier.send(
-                    f"PAPER SELL - {position.ticker}",
-                    f"ACTION: SELL. Official market-close exit at ${position.exit_price:,.2f}. "
-                    f"P/L ${position.pnl:,.2f} ({position.return_pct:+.2f}%). "
-                    "No real order was placed.",
+                    f"SIMULATION: SELL {position.ticker} - POSITION CLOSED",
+                    f"SELL: {position.ticker}\n"
+                    f"Exit price: ${position.exit_price:,.2f}\n"
+                    f"Result: ${position.pnl:+,.2f} ({position.return_pct:+.2f}%)\n\n"
+                    "The paper position is closed. No real order was placed.",
                     priority="high",
                     tags=("checkered_flag", "chart_with_upwards_trend"),
                     click_url=self.config.dashboard_url,
@@ -146,7 +147,13 @@ class DailyPaperTrader:
         ]
         return bool(positions) and all(position.status == "CLOSED" for position in positions)
 
-    def _prepare(self, session_date: date, moment: datetime) -> None:
+    def _prepare(
+        self,
+        session_date: date,
+        moment: datetime,
+        *,
+        notify_watchlist: bool = True,
+    ) -> None:
         scan = self.engine.scan_market(
             as_of=moment,
             include_news=self.config.include_news,
@@ -156,12 +163,16 @@ class DailyPaperTrader:
             raise RuntimeError("The research scan returned no paper-trade candidates.")
         self.candidate = scan.analyses[0]
         self.prepared_for = session_date
+        if not notify_watchlist:
+            return
         pick = self.candidate
         self.notifier.send(
-            f"WAIT - PaperAlpha watchlist - {pick.ticker}",
-            f"ACTION: WAIT. Pre-market candidate for {session_date}: {pick.ticker} at the latest reference "
-            f"price ${pick.price:,.2f}; score {pick.score:.1f}/100 and signal strength "
-            f"{pick.signal_strength:.0f}/100. WAIT for the separate paper BUY alert after open.",
+            f"WATCH ONLY: {pick.ticker} - DO NOT BUY YET",
+            f"NO ACTION YET.\n\n"
+            f"Watching: {pick.ticker}\n"
+            f"Reference price: ${pick.price:,.2f}\n"
+            f"Model score: {pick.score:.1f}/100\n\n"
+            "Wait for a separate SIMULATION: BUY alert.",
             tags=("eyes", "mag"),
             click_url=self.config.dashboard_url,
         )
@@ -179,12 +190,14 @@ class DailyPaperTrader:
             fractional_shares=self.config.fractional_shares,
         )
         self.notifier.send(
-            f"PAPER BUY - {position.ticker}",
-            f"ACTION: BUY. Simulated entry: {position.shares:,.6g} shares at "
-            f"${position.entry_price:,.2f}; "
-            f"paper budget {budget_description}. Trade {trade_number}/"
-            f"{self.config.max_trades_per_day}. Hold until an exit rule or the "
-            "official close. No real order was placed.",
+            f"SIMULATION: BUY {position.ticker} - THEN HOLD",
+            f"BUY: {position.ticker}\n"
+            f"Entry price: ${position.entry_price:,.2f}\n"
+            f"Amount: {position.shares:,.6g} shares\n"
+            f"Paper balance: {budget_description}\n"
+            f"Trade: {trade_number} of {self.config.max_trades_per_day}\n\n"
+            "NEXT: HOLD. Wait for a SIMULATION: SELL alert.\n"
+            "No real order was placed.",
             priority="high",
             tags=("large_green_circle", "chart_with_upwards_trend"),
             click_url=self.config.dashboard_url,
@@ -243,10 +256,13 @@ class DailyPaperTrader:
                 ],
             )
             self.notifier.send(
-                f"PAPER SELL - {closed.ticker}",
-                f"ACTION: SELL. {decision.reason.capitalize()}. Simulated exit "
-                f"${closed.exit_price:,.2f}; P/L ${closed.pnl:+,.2f} "
-                f"({closed.return_pct:+.2f}%). No real order was placed.",
+                f"SIMULATION: SELL {closed.ticker} - POSITION CLOSED",
+                f"SELL: {closed.ticker}\n"
+                f"Exit price: ${closed.exit_price:,.2f}\n"
+                f"Reason: {decision.reason.capitalize()}\n"
+                f"Result: ${closed.pnl:+,.2f} ({closed.return_pct:+.2f}%)\n\n"
+                "The paper position is closed. Wait for the next SIMULATION: BUY alert.\n"
+                "No real order was placed.",
                 priority="high",
                 tags=("red_circle", "chart_with_downwards_trend"),
                 click_url=self.config.dashboard_url,
@@ -361,8 +377,8 @@ def main() -> None:
     initialize_runtime_files()
     trader = build_day_trader(args)
     trader.notifier.send(
-        "PaperAlpha runner online",
-        "The laptop is connected. Today's actions are simulated paper trades only.",
+        "STATUS ONLY: PaperAlpha is running",
+        "NO ACTION. The paper-trading monitor is online. Wait for a SIMULATION: BUY or SELL alert.",
         tags=("computer", "white_check_mark"),
         click_url=args.dashboard_url,
     )

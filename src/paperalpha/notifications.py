@@ -154,8 +154,8 @@ def main() -> None:
 
     notifier = NtfyNotifier(load_notification_config(args.config))
     notifier.send(
-        "PaperAlpha test",
-        "Notifications are connected. Alerts are simulated paper trades only.",
+        "TEST ONLY: PaperAlpha notifications work",
+        "NO ACTION. This is only a connection test. Trading alerts will clearly say SIMULATION: BUY or SELL.",
         priority="high",
         tags=("white_check_mark", "chart_with_upwards_trend"),
     )

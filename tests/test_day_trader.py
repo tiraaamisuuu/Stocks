@@ -85,9 +85,11 @@ def test_paper_day_prepares_buys_and_closes_with_notifications(tmp_path, analysi
     assert position.status == "CLOSED"
     assert position.entry_price == 101
     assert position.exit_price == 104
-    assert any(title.startswith("WAIT - PaperAlpha watchlist") for title, *_ in notifier.messages)
-    assert any(title == "PAPER BUY - TEST" for title, *_ in notifier.messages)
-    assert any(title == "PAPER SELL - TEST" for title, *_ in notifier.messages)
+    assert any(title == "WATCH ONLY: TEST - DO NOT BUY YET" for title, *_ in notifier.messages)
+    assert any(title == "SIMULATION: BUY TEST - THEN HOLD" for title, *_ in notifier.messages)
+    assert any(
+        title == "SIMULATION: SELL TEST - POSITION CLOSED" for title, *_ in notifier.messages
+    )
     assert trader.session_complete(after_close)
 
 
@@ -120,6 +122,33 @@ def test_paper_day_does_not_duplicate_existing_session_position(tmp_path, analys
     trader.step(datetime(2026, 8, 12, 14, 0, tzinfo=UTC))
 
     assert [position.id for position in store.positions()] == [existing.id]
+
+
+def test_mid_session_scan_sends_buy_without_a_late_watch_alert(tmp_path, analysis) -> None:
+    market_data = FakeMarketData()
+    store = PortfolioStore(tmp_path / "portfolio.db")
+    clock = MarketClock()
+    notifier = RecordingNotifier()
+    trader = DailyPaperTrader(
+        engine=FakeResearchEngine(analysis),
+        market_data=market_data,
+        store=store,
+        clock=clock,
+        monitor=PositionMonitor(
+            store,
+            market_data,
+            clock,
+            SessionReporter(tmp_path / "reports"),
+        ),
+        notifier=notifier,
+        config=PaperDayConfig(fractional_shares=True),
+    )
+
+    trader.step(datetime(2026, 8, 12, 14, 0, tzinfo=UTC))
+
+    titles = [title for title, *_ in notifier.messages]
+    assert titles == ["SIMULATION: BUY TEST - THEN HOLD"]
+    assert "NEXT: HOLD" in notifier.messages[0][1]
 
 
 def test_paper_day_reuses_realized_balance_for_next_trade(tmp_path, analysis) -> None:
@@ -160,9 +189,9 @@ def test_paper_day_reuses_realized_balance_for_next_trade(tmp_path, analysis) ->
     assert positions[0].budget == 110
     assert any("trade 2/5" in event for event in events)
     buy_message = next(
-        message for title, message, _ in notifier.messages if title.startswith("PAPER BUY")
+        message for title, message, _ in notifier.messages if title.startswith("SIMULATION: BUY")
     )
-    assert "Trade 2/5" in buy_message
+    assert "Trade: 2 of 5" in buy_message
     assert "$110.00 available after today's +$10.00 realized P/L" in buy_message
 
 
@@ -225,7 +254,7 @@ def test_paper_day_converts_gbp_budget_at_entry_time(tmp_path, analysis) -> None
     position = store.positions()[0]
     assert position.budget == 187.5
     buy_message = next(
-        message for title, message, _ in notifier.messages if title.startswith("PAPER BUY")
+        message for title, message, _ in notifier.messages if title.startswith("SIMULATION: BUY")
     )
     assert "£150.00 ($187.50 at GBP/USD 1.2500)" in buy_message
 
@@ -263,9 +292,12 @@ def test_paper_day_sends_one_event_driven_sell_alert(tmp_path, analysis) -> None
     events = trader.step(datetime(2026, 8, 12, 13, 32, tzinfo=UTC))
 
     position = store.positions()[0]
-    sell_messages = [item for item in notifier.messages if item[0] == "PAPER SELL - TEST"]
+    sell_messages = [
+        item for item in notifier.messages if item[0] == "SIMULATION: SELL TEST - POSITION CLOSED"
+    ]
     assert position.status == "CLOSED"
     assert position.exit_price == 96.9
     assert len(sell_messages) == 1
-    assert "ACTION: SELL" in sell_messages[0][1]
+    assert "SELL: TEST" in sell_messages[0][1]
+    assert "The paper position is closed" in sell_messages[0][1]
     assert any("HARD_STOP" in event for event in events)
