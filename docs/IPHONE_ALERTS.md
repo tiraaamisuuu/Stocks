@@ -53,6 +53,14 @@ Run without fractional shares or with a different paper budget:
 paperalpha-day --budget 2500
 ```
 
+Use a GBP-denominated budget that is converted at the simulated entry time:
+
+```powershell
+paperalpha-day --budget-gbp 150 --fractional
+```
+
+For an always-on Windows laptop, follow the [server setup guide](SERVER_SETUP.md).
+
 If the Streamlit dashboard is available at a safe URL, attach it to notifications:
 
 ```powershell

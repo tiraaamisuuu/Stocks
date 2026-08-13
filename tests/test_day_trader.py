@@ -30,7 +30,8 @@ class FakeResearchEngine:
 
 class FakeMarketData:
     def latest_price(self, ticker: str) -> float:
-        del ticker
+        if ticker == "GBPUSD=X":
+            return 1.25
         return 101.0
 
     def session_close(self, ticker: str, session_date: date) -> float:
@@ -119,3 +120,33 @@ def test_paper_day_does_not_duplicate_existing_session_position(tmp_path, analys
     trader.step(datetime(2026, 8, 12, 14, 0, tzinfo=UTC))
 
     assert [position.id for position in store.positions()] == [existing.id]
+
+
+def test_paper_day_converts_gbp_budget_at_entry_time(tmp_path, analysis) -> None:
+    market_data = FakeMarketData()
+    store = PortfolioStore(tmp_path / "portfolio.db")
+    notifier = RecordingNotifier()
+    clock = MarketClock()
+    trader = DailyPaperTrader(
+        engine=FakeResearchEngine(analysis),
+        market_data=market_data,
+        store=store,
+        clock=clock,
+        monitor=PositionMonitor(
+            store,
+            market_data,
+            clock,
+            SessionReporter(tmp_path / "reports"),
+        ),
+        notifier=notifier,
+        config=PaperDayConfig(budget_gbp=150, fractional_shares=True),
+    )
+
+    trader.step(datetime(2026, 8, 12, 13, 31, tzinfo=UTC))
+
+    position = store.positions()[0]
+    assert position.budget == 187.5
+    buy_message = next(
+        message for title, message, _ in notifier.messages if title.startswith("PAPER BUY")
+    )
+    assert "£150.00 ($187.50 at GBP/USD 1.2500)" in buy_message

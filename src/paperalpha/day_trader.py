@@ -41,6 +41,7 @@ class Notifier(Protocol):
 @dataclass(frozen=True)
 class PaperDayConfig:
     budget: float = 1_000.0
+    budget_gbp: float | None = None
     fractional_shares: bool = False
     include_news: bool = True
     deep_scan_size: int = DEFAULT_DEEP_SCAN_SIZE
@@ -165,17 +166,18 @@ class DailyPaperTrader:
         if self.candidate is None:
             raise RuntimeError("A candidate must be prepared before opening a paper position.")
         live_price = self.market_data.latest_price(self.candidate.ticker)
+        budget, budget_description = self._paper_budget()
         analysis = replace(self.candidate, price=live_price)
         position = self.store.open_position(
             analysis,
-            self.config.budget,
+            budget,
             opened_at=moment,
             fractional_shares=self.config.fractional_shares,
         )
         self.notifier.send(
             f"PAPER BUY · {position.ticker}",
             f"Simulated entry: {position.shares:,.6g} shares at ${position.entry_price:,.2f}; "
-            f"paper budget ${position.budget:,.2f}. Hold for today's experiment until the "
+            f"paper budget {budget_description}. Hold for today's experiment until the "
             "official close. No real order was placed.",
             priority="high",
             tags=("large_green_circle", "chart_with_upwards_trend"),
@@ -183,6 +185,16 @@ class DailyPaperTrader:
         )
         self.last_update_notice = moment
         return position
+
+    def _paper_budget(self) -> tuple[float, str]:
+        if self.config.budget_gbp is None:
+            return self.config.budget, f"${self.config.budget:,.2f}"
+        gbp_usd = self.market_data.latest_price("GBPUSD=X")
+        usd_budget = self.config.budget_gbp * gbp_usd
+        return (
+            usd_budget,
+            f"£{self.config.budget_gbp:,.2f} (${usd_budget:,.2f} at GBP/USD {gbp_usd:.4f})",
+        )
 
     def _maybe_send_progress(self, moment: datetime) -> None:
         if self.last_update_notice is not None and moment - self.last_update_notice < timedelta(
@@ -228,7 +240,8 @@ def build_day_trader(args: argparse.Namespace) -> DailyPaperTrader:
         monitor=monitor,
         notifier=notifier,
         config=PaperDayConfig(
-            budget=args.budget,
+            budget=args.budget if args.budget is not None else 1_000.0,
+            budget_gbp=args.budget_gbp,
             fractional_shares=args.fractional,
             include_news=not args.no_news,
             deep_scan_size=args.deep_scan_size,
@@ -243,7 +256,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run one automated, notification-backed PaperAlpha paper-trading day."
     )
-    parser.add_argument("--budget", type=float, default=1_000.0, help="Paper budget in USD.")
+    budget_group = parser.add_mutually_exclusive_group()
+    budget_group.add_argument("--budget", type=float, default=None, help="Paper budget in USD.")
+    budget_group.add_argument("--budget-gbp", type=float, help="Paper budget in GBP.")
     parser.add_argument("--fractional", action="store_true", help="Allow fractional paper shares.")
     parser.add_argument("--no-news", action="store_true", help="Skip current headline sentiment.")
     parser.add_argument("--deep-scan-size", type=int, default=DEFAULT_DEEP_SCAN_SIZE)
@@ -254,9 +269,16 @@ def main() -> None:
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH))
     parser.add_argument("--notification-config", default=str(NOTIFICATION_CONFIG_PATH))
     parser.add_argument("--once", action="store_true", help="Run one state-machine step and exit.")
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Stay online after the closing report and prepare again on the next market day.",
+    )
     args = parser.parse_args()
-    if args.budget <= 0:
+    if args.budget is not None and args.budget <= 0:
         parser.error("--budget must be positive.")
+    if args.budget_gbp is not None and args.budget_gbp <= 0:
+        parser.error("--budget-gbp must be positive.")
     if args.interval < 15:
         parser.error("--interval must be at least 15 seconds.")
     if args.update_minutes < 15:
@@ -278,7 +300,7 @@ def main() -> None:
                 print(f"[{timestamp}] {event}", flush=True)
         except (MarketDataError, RuntimeError) as exc:
             print(f"[{timestamp}] {exc}", flush=True)
-        if args.once or trader.session_complete():
+        if args.once or (not args.continuous and trader.session_complete()):
             break
         time.sleep(args.interval)
 

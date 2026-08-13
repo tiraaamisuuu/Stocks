@@ -1,5 +1,6 @@
 param(
-    [double]$Budget = 1000,
+    [double]$Budget = 0,
+    [double]$BudgetGbp = 0,
     [switch]$Fractional,
     [switch]$NoNews,
     [string]$DashboardUrl = ""
@@ -11,6 +12,13 @@ $notificationConfig = Join-Path $projectRoot "state\notifications.json"
 
 Push-Location $projectRoot
 try {
+    if ($Budget -gt 0 -and $BudgetGbp -gt 0) {
+        throw "Use either -Budget (USD) or -BudgetGbp, not both."
+    }
+    if ($Budget -le 0 -and $BudgetGbp -le 0) {
+        $Budget = 1000
+    }
+
     python -m pip install -e .
     if ($LASTEXITCODE -ne 0) {
         throw "PaperAlpha installation failed."
@@ -33,9 +41,14 @@ try {
 
     $runnerArguments = @(
         "-m", "paperalpha.day_trader",
-        "--budget", $Budget,
         "--dashboard-url", $DashboardUrl
     )
+    if ($BudgetGbp -gt 0) {
+        $runnerArguments += @("--budget-gbp", $BudgetGbp)
+    }
+    else {
+        $runnerArguments += @("--budget", $Budget)
+    }
     if ($Fractional) {
         $runnerArguments += "--fractional"
     }

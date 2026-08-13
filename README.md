@@ -174,6 +174,17 @@ subscription, sends a connection test, and keeps running until the official clos
 complete. The ledger prevents a restart from opening a duplicate paper position for that session.
 See [the complete iPhone alert setup](docs/IPHONE_ALERTS.md) for behavior and security notes.
 
+For an old Windows laptop that should remain online across market days, use the scheduled-task
+installer instead:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows_server.ps1 -BudgetGbp 150
+```
+
+It creates an isolated environment, walks through ntfy setup, starts PaperAlpha immediately, and
+registers automatic sign-in/daily triggers with failure restarts. See the
+[always-on Windows server guide](docs/SERVER_SETUP.md).
+
 ## Public trader disclosures
 
 PaperAlpha deliberately does not scrape social-media claims or pretend that delayed filings are
